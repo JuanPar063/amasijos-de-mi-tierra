@@ -1,0 +1,47 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Artefactos generados por la app (reportes y respaldos descargados)
+reporte-*.pdf
+respaldo-*.json
+
+# Editor / SO
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code (config local/personal)
+.claude/settings.local.json
+
+# Capacitor / Android (Fase 4)
+packages/mobile/android/
+packages/mobile/ios/
+
+# Terraform (Fase 5)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example

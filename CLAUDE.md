@@ -31,7 +31,9 @@ seleccionado por `VITE_STORAGE_MODE`.
 Cada insumo tiene una **unidad base** (`Insumo.unidadBase`):
 
 - `'g'` (**peso**): se almacena en gramos; libras/kg son solo presentación.
-  `1 libra = 453.59237 g` (`GRAMOS_POR_LIBRA` en `packages/shared/src/calc`).
+  En este negocio **1 libra = 500 g** (libra comercial colombiana, no la imperial);
+  `GRAMOS_POR_LIBRA = 500` en `packages/shared/src/calc`. Fuente:
+  `docs/datos-panaderia-insumos-unidades.md`.
 - `'u'` (**conteo**): se almacena en unidades enteras (p. ej. huevos).
 
 Todas las cantidades de un insumo (stock, compras, receta, consumo) usan **su**
@@ -114,7 +116,8 @@ de cada fase** para que Pardo revise antes de continuar.
   Dexie, pantallas CRUD, dashboard, PWA instalable)
 - **Fase 2** — Reportes PDF + backup/restore JSON + "cerrar el mes" ✅
   (+ unidad de medida por insumo: peso `'g'` / conteo `'u'`)
-- **Fase 3** — Backend Express + PostgreSQL + `ApiRepository` + docker-compose
+- **Fase 3** — Backend Express + PostgreSQL + `ApiRepository` + docker-compose ✅
+  (código completo; falta correr `docker compose up` para verificación end-to-end)
 - **Fase 4** — Capacitor/APK + SQLite nativo + Filesystem/Share
 - **Fase 5** — Terraform + GitHub Actions (los **redacta** el agente; los **aplica**
   Pardo, sección 7 del plan)

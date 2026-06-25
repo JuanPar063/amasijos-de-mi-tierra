@@ -1,0 +1,46 @@
+# Versión "nube" en local: frontend + backend + PostgreSQL.
+# Uso: docker compose up --build   ->   frontend en http://localhost:8080
+
+name: panaderia
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: panaderia
+      POSTGRES_PASSWORD: panaderia
+      POSTGRES_DB: panaderia
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U panaderia']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    environment:
+      DATABASE_URL: postgres://panaderia:panaderia@postgres:5432/panaderia
+      PORT: '3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+
+volumes:
+  pgdata:

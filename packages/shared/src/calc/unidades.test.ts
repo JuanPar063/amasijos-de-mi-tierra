@@ -8,8 +8,9 @@ import {
 } from './unidades';
 
 describe('conversión de unidades', () => {
-  it('1 libra = 453.59237 g', () => {
-    expect(librasAGramos(1)).toBe(GRAMOS_POR_LIBRA);
+  it('1 libra = 500 g (libra comercial colombiana)', () => {
+    expect(GRAMOS_POR_LIBRA).toBe(500);
+    expect(librasAGramos(1)).toBe(500);
   });
 
   it('ida y vuelta libras<->gramos es identidad', () => {

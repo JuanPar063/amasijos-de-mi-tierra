@@ -53,5 +53,16 @@ docs/
 ## Estado
 
 Fases 0, 1 y 2 completas (núcleo local offline/instalable + reportes PDF, respaldo
-JSON y cierre de mes; insumos por peso o por unidades). Próximo: Fase 3 — backend
-Express + PostgreSQL + adaptador de API. Ver el desglose en [`CLAUDE.md`](CLAUDE.md).
+JSON y cierre de mes; insumos por peso o por unidades). Fase 3 implementada (backend
+Express + PostgreSQL + `ApiRepository` + `docker compose`; pendiente la verificación
+end-to-end con Docker). Próximo: Fase 4 — APK con Capacitor. Ver el desglose en
+[`CLAUDE.md`](CLAUDE.md).
+
+## Versión nube (Fase 3)
+
+```bash
+docker compose up --build
+```
+
+Frontend (modo API) en http://localhost:8080, API en http://localhost:3001/api,
+PostgreSQL en localhost:5432. La misma UI corre con `VITE_STORAGE_MODE=api`.

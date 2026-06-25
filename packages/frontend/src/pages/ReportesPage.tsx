@@ -19,6 +19,7 @@ import {
 import { useRepository } from '../storage/repo-context';
 import { descargarJSON, leerArchivoJSON, selloFecha } from '../lib/archivo';
 import type { VentaProducto } from '../lib/pdf';
+import { cargarCatalogoInicial } from '../data/seed';
 import { formatFecha, hoyISO, inicioDeMesISO } from '../lib/format';
 
 function ventasPorProducto(
@@ -51,6 +52,7 @@ export function ReportesPage() {
 
   const importar = useAccion((r, data: BackupJSON) => r.importarBackup(data));
   const cerrar = useAccion((r, hasta: string) => r.borrarRegistros({ hasta }));
+  const sembrar = useAccion((r) => cargarCatalogoInicial(r));
 
   const [desde, setDesde] = useState(inicioDeMesISO());
   const [hasta, setHasta] = useState(hoyISO());
@@ -106,6 +108,18 @@ export function ReportesPage() {
     }
   }
 
+  async function cargarCatalogo() {
+    if (
+      insumos.length > 0 &&
+      !window.confirm(
+        `Ya hay ${insumos.length} insumo(s). Cargar el catálogo inicial puede duplicar datos. ¿Continuar?`,
+      )
+    )
+      return;
+    const res = await sembrar.mutateAsync();
+    setMensaje(`Catálogo cargado: ${res.insumos} insumos y ${res.productos} productos.`);
+  }
+
   async function cerrarMes() {
     // Principio: respaldo antes de borrar. Descargamos JSON + PDF y luego borramos.
     if (
@@ -128,6 +142,17 @@ export function ReportesPage() {
       <EncabezadoPagina titulo="Reportes y respaldo" />
 
       <div className="flex flex-col gap-4">
+        <Tarjeta>
+          <p className="mb-1 font-semibold text-amber-950">Catálogo inicial</p>
+          <p className="mb-3 text-sm text-amber-600">
+            Carga los insumos (con su precio) y los productos con su receta del
+            negocio para empezar rápido.
+          </p>
+          <Boton variante="secundario" className="w-full" onClick={cargarCatalogo}>
+            🧺 Cargar catálogo inicial
+          </Boton>
+        </Tarjeta>
+
         <Tarjeta>
           <p className="mb-3 font-semibold text-amber-950">Reporte PDF por periodo</p>
           <div className="flex gap-2">

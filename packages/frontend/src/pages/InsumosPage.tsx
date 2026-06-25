@@ -18,6 +18,7 @@ import {
   Tarjeta,
 } from '../components/ui';
 import { useAccion, useInsumos } from '../data/hooks';
+import { cargarCatalogoInicial } from '../data/seed';
 
 export function InsumosPage() {
   const { data: insumos = [] } = useInsumos();
@@ -26,6 +27,7 @@ export function InsumosPage() {
     repo.insumos.update(a.id, a.data),
   );
   const borrar = useAccion((repo, id: string) => repo.insumos.delete(id));
+  const sembrar = useAccion((repo) => cargarCatalogoInicial(repo));
 
   const [editando, setEditando] = useState<Insumo | null>(null);
   const [abierto, setAbierto] = useState(false);
@@ -66,11 +68,16 @@ export function InsumosPage() {
       />
 
       {insumos.length === 0 ? (
-        <PantallaVacia
-          icono="🌾"
-          titulo="Sin insumos"
-          descripcion="Agrega harina (peso), huevos (unidades), etc."
-        />
+        <div className="flex flex-col items-center gap-3">
+          <PantallaVacia
+            icono="🌾"
+            titulo="Sin insumos"
+            descripcion="Agrega harina (peso), huevos (unidades), etc."
+          />
+          <Boton variante="secundario" onClick={() => sembrar.mutate()} disabled={sembrar.isPending}>
+            🧺 Cargar catálogo inicial
+          </Boton>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {insumos.map((i) => (

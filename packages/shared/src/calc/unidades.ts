@@ -1,9 +1,13 @@
 // Conversión y formateo de cantidades.
-// Insumos de peso usan GRAMOS como unidad base; 1 libra = 453.59237 g (exacto).
-// Insumos de conteo usan UNIDADES enteras (p. ej. huevos).
+// Insumos de peso usan GRAMOS como unidad base; insumos de conteo usan UNIDADES
+// enteras (p. ej. huevos).
+//
+// LIBRA = 500 g: en esta panadería (uso comercial colombiano) la "libra" es la
+// libra métrica de 500 g, no la libra imperial (453.59237 g). Así lo fija el
+// documento de datos del negocio (docs/datos-panaderia-insumos-unidades.md).
 import type { UnidadBase } from '../domain/entities';
 
-export const GRAMOS_POR_LIBRA = 453.59237;
+export const GRAMOS_POR_LIBRA = 500;
 export const GRAMOS_POR_KILO = 1000;
 
 export function gramosALibras(gramos: number): number {

@@ -80,12 +80,12 @@ export function ReportesPage() {
       insumos,
       ventasPorProducto: ventasPorProducto(entregas, entregaItems, d, h),
     });
-    descargarPDF(doc, `reporte-${d}_${h}.pdf`);
+    await descargarPDF(doc, `reporte-${d}_${h}.pdf`);
   }
 
   async function descargarRespaldo() {
     const backup = await repo.exportarBackup();
-    descargarJSON(backup, `respaldo-panaderia-${selloFecha()}.json`);
+    await descargarJSON(backup, `respaldo-panaderia-${selloFecha()}.json`);
     setMensaje('Respaldo descargado.');
   }
 
@@ -131,7 +131,7 @@ export function ReportesPage() {
     )
       return;
     const backup = await repo.exportarBackup();
-    descargarJSON(backup, `respaldo-cierre-${selloFecha()}.json`);
+    await descargarJSON(backup, `respaldo-cierre-${selloFecha()}.json`);
     await generarReporte(desde, hasta);
     await cerrar.mutateAsync(hasta);
     setMensaje(`Periodo cerrado hasta ${formatFecha(hasta)}. Respaldo y reporte descargados.`);

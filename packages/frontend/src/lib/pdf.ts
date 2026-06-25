@@ -139,7 +139,24 @@ export function construirReportePeriodo(d: DatosReporte): TDocumentDefinitions {
   };
 }
 
-/** Genera y descarga el PDF en el navegador. */
-export function descargarPDF(doc: TDocumentDefinitions, nombreArchivo: string): void {
-  pdfMake.createPdf(doc).download(nombreArchivo);
+/**
+ * Genera el PDF y lo entrega: en web lo descarga; en el APK (nativo) lo guarda
+ * en el dispositivo y abre el diálogo para compartirlo.
+ */
+export async function descargarPDF(doc: TDocumentDefinitions, nombreArchivo: string): Promise<void> {
+  const pdf = pdfMake.createPdf(doc);
+  const { Capacitor } = await import('@capacitor/core');
+  if (!Capacitor.isNativePlatform()) {
+    pdf.download(nombreArchivo);
+    return;
+  }
+  const base64 = await new Promise<string>((res) => pdf.getBase64((d) => res(d)));
+  const { Filesystem, Directory } = await import('@capacitor/filesystem');
+  const { Share } = await import('@capacitor/share');
+  const escrito = await Filesystem.writeFile({
+    path: nombreArchivo,
+    data: base64,
+    directory: Directory.Cache,
+  });
+  await Share.share({ title: nombreArchivo, url: escrito.uri });
 }

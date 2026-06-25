@@ -52,11 +52,12 @@ docs/
 
 ## Estado
 
-Fases 0, 1 y 2 completas (núcleo local offline/instalable + reportes PDF, respaldo
-JSON y cierre de mes; insumos por peso o por unidades). Fase 3 implementada (backend
-Express + PostgreSQL + `ApiRepository` + `docker compose`; pendiente la verificación
-end-to-end con Docker). Próximo: Fase 4 — APK con Capacitor. Ver el desglose en
-[`CLAUDE.md`](CLAUDE.md).
+Fases 0–4 completas. Núcleo local offline/instalable (PWA) + reportes PDF, respaldo
+JSON y cierre de mes; insumos por peso o por unidades. Versión nube (Fase 3: backend
+Express + PostgreSQL + `docker compose`, verificada end-to-end). APK Android (Fase 4:
+Capacitor + SQLite nativo + Filesystem/Share; el autor compila el APK, ver
+[`packages/mobile/README.md`](packages/mobile/README.md)). Falta la Fase 5 (Terraform
++ CI/CD). Ver el desglose en [`CLAUDE.md`](CLAUDE.md).
 
 ## Versión nube (Fase 3)
 

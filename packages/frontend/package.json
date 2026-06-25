@@ -11,6 +11,10 @@
     "test": "echo \"(frontend) sin pruebas todavia\" && exit 0"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^6.0.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/filesystem": "^6.0.3",
+    "@capacitor/share": "^6.0.3",
     "@panaderia/shared": "workspace:*",
     "@tanstack/react-query": "^5.64.0",
     "dexie": "^4.0.10",

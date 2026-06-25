@@ -117,8 +117,9 @@ de cada fase** para que Pardo revise antes de continuar.
 - **Fase 2** — Reportes PDF + backup/restore JSON + "cerrar el mes" ✅
   (+ unidad de medida por insumo: peso `'g'` / conteo `'u'`)
 - **Fase 3** — Backend Express + PostgreSQL + `ApiRepository` + docker-compose ✅
-  (código completo; falta correr `docker compose up` para verificación end-to-end)
-- **Fase 4** — Capacitor/APK + SQLite nativo + Filesystem/Share
+  (verificado end-to-end con `docker compose up`)
+- **Fase 4** — Capacitor/APK + SQLite nativo + Filesystem/Share ✅
+  (código y config completos; el autor compila el APK, ver `packages/mobile/README.md`)
 - **Fase 5** — Terraform + GitHub Actions (los **redacta** el agente; los **aplica**
   Pardo, sección 7 del plan)
 

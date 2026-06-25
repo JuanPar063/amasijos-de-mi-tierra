@@ -52,11 +52,13 @@ export function Campo({
   className = '',
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { etiqueta: string }) {
+  // `className` se aplica al contenedor (p. ej. flex-1); el input siempre ocupa
+  // todo el ancho disponible. `min-w-0` permite que encoja dentro de filas flex.
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-amber-900">
+    <label className={`flex min-w-0 flex-col gap-1 text-sm font-medium text-amber-900 ${className}`}>
       <span>{etiqueta}</span>
       <input
-        className={`rounded-xl border border-amber-200 bg-white px-4 py-3 text-base text-amber-950 outline-none focus:border-amber-500 ${className}`}
+        className="w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-base text-amber-950 outline-none focus:border-amber-500"
         {...props}
       />
     </label>

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ingresosDeEntrega, type NuevaEntrega, type NuevoEntregaItem } from '@panaderia/shared';
+import {
+  ingresosDeEntrega,
+  inventarioPorProducto,
+  type NuevaEntrega,
+  type NuevoEntregaItem,
+} from '@panaderia/shared';
 import {
   Boton,
   BotonFlotante,
@@ -15,6 +20,7 @@ import {
   useAccion,
   useEntregaItems,
   useEntregas,
+  useProducciones,
   useProductos,
   useTiendas,
 } from '../data/hooks';
@@ -27,6 +33,18 @@ export function EntregasPage() {
   const { data: items = [] } = useEntregaItems();
   const { data: tiendas = [] } = useTiendas();
   const { data: productos = [] } = useProductos();
+  const { data: producciones = [] } = useProducciones();
+
+  // Inventario de producto terminado (producido − entregado). Solo se puede
+  // entregar lo que se ha producido y no se ha entregado aún.
+  const inventario = useMemo(
+    () => inventarioPorProducto(producciones, items),
+    [producciones, items],
+  );
+  const productosDisponibles = useMemo(
+    () => productos.filter((p) => (inventario.get(p.id) ?? 0) > 0),
+    [productos, inventario],
+  );
 
   const crear = useAccion(
     (repo, a: { data: NuevaEntrega; items: NuevoEntregaItem[] }) =>
@@ -63,7 +81,7 @@ export function EntregasPage() {
     setAbierto(true);
   }
   function agregarFila() {
-    const primero = productos[0];
+    const primero = productosDisponibles[0];
     setFilas((f) => [
       ...f,
       { productoId: primero?.id ?? '', cantidad: 1, precioUnitario: primero?.precioVenta ?? 0 },
@@ -98,6 +116,12 @@ export function EntregasPage() {
           icono="🚲"
           titulo="Falta información"
           descripcion="Necesitas al menos una tienda y un producto para registrar entregas."
+        />
+      ) : entregas.length === 0 && productosDisponibles.length === 0 ? (
+        <PantallaVacia
+          icono="👨‍🍳"
+          titulo="Sin pan para entregar"
+          descripcion="Primero registra producción: solo puedes entregar pan que se haya producido."
         />
       ) : entregas.length === 0 ? (
         <PantallaVacia icono="🚲" titulo="Sin entregas" descripcion="Registra una entrega a una tienda." />
@@ -135,7 +159,7 @@ export function EntregasPage() {
         </div>
       )}
 
-      {tiendas.length > 0 && productos.length > 0 && (
+      {tiendas.length > 0 && productosDisponibles.length > 0 && (
         <BotonFlotante onClick={abrir} texto="+ Registrar entrega" />
       )}
 
@@ -183,7 +207,10 @@ export function EntregasPage() {
                       precioUnitario: precioProducto.get(e.target.value) ?? fila.precioUnitario,
                     })
                   }
-                  opciones={productos.map((p) => ({ valor: p.id, texto: p.nombre }))}
+                  opciones={productosDisponibles.map((p) => ({
+                    valor: p.id,
+                    texto: `${p.nombre} (disp. ${inventario.get(p.id) ?? 0})`,
+                  }))}
                 />
                 <div className="flex gap-2">
                   <Campo

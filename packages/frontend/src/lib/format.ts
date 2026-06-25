@@ -15,6 +15,14 @@ export function inicioDeMesISO(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 }
 
+/** Lunes de la semana actual en ISO. */
+export function inicioDeSemanaISO(): string {
+  const d = new Date();
+  const desdeLunes = (d.getDay() + 6) % 7; // 0=lunes … 6=domingo
+  d.setDate(d.getDate() - desdeLunes);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Hora actual 'HH:MM' (hora local). */
 export function ahoraHHMM(): string {
   const d = new Date();

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatCantidad, resumenPeriodo, type ResumenInput } from '@panaderia/shared';
 import { EncabezadoPagina, Tarjeta } from '../components/ui';
@@ -11,7 +11,10 @@ import {
   useProductos,
   useRecetas,
 } from '../data/hooks';
-import { formatDinero, hoyISO, inicioDeMesISO } from '../lib/format';
+import { formatDinero, hoyISO, inicioDeMesISO, inicioDeSemanaISO } from '../lib/format';
+
+type Periodo = 'dia' | 'semana' | 'mes';
+const ETIQUETA_PERIODO: Record<Periodo, string> = { dia: 'Día', semana: 'Semana', mes: 'Mes' };
 
 export function Dashboard() {
   const { data: insumos = [] } = useInsumos();
@@ -23,7 +26,9 @@ export function Dashboard() {
   const { data: entregaItems = [] } = useEntregaItems();
 
   const hoy = hoyISO();
-  const inicioMes = inicioDeMesISO();
+  const [periodo, setPeriodo] = useState<Periodo>('dia');
+  const desdePeriodo =
+    periodo === 'dia' ? hoy : periodo === 'semana' ? inicioDeSemanaISO() : inicioDeMesISO();
 
   const base: Omit<ResumenInput, 'desde' | 'hasta'> = {
     producciones,
@@ -38,10 +43,10 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [producciones, recetas, compras, entregas, entregaItems, insumos, hoy],
   );
-  const resumenMes = useMemo(
-    () => resumenPeriodo({ ...base, desde: inicioMes, hasta: hoy }),
+  const resumen = useMemo(
+    () => resumenPeriodo({ ...base, desde: desdePeriodo, hasta: hoy }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [producciones, recetas, compras, entregas, entregaItems, insumos, inicioMes, hoy],
+    [producciones, recetas, compras, entregas, entregaItems, insumos, desdePeriodo, hoy],
   );
 
   const nombreInsumo = useMemo(() => new Map(insumos.map((i) => [i.id, i.nombre])), [insumos]);
@@ -96,16 +101,31 @@ export function Dashboard() {
           </div>
         </Tarjeta>
 
-        <Tarjeta className="bg-amber-600 text-white">
-          <p className="text-sm font-semibold text-amber-100">Resumen del mes</p>
-          <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-            <Metrica etiqueta="Producción" valor={`${resumenMes.unidadesProducidas} u`} />
-            <Metrica etiqueta="Entregas" valor={String(resumenMes.numEntregas)} />
-            <Metrica etiqueta="Ingresos" valor={formatDinero(resumenMes.ingresos)} />
-            <Metrica etiqueta="Costo" valor={formatDinero(resumenMes.costoProduccion)} />
-            <Metrica etiqueta="Margen" valor={formatDinero(resumenMes.margen)} destacar />
+        <div className="rounded-2xl bg-amber-700 p-4 text-white shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold">Resumen</p>
+            <div className="flex gap-1 rounded-lg bg-amber-900/30 p-0.5 text-xs">
+              {(['dia', 'semana', 'mes'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriodo(p)}
+                  className={`rounded-md px-2.5 py-1 transition ${
+                    periodo === p ? 'bg-white font-semibold text-amber-800' : 'text-amber-100'
+                  }`}
+                >
+                  {ETIQUETA_PERIODO[p]}
+                </button>
+              ))}
+            </div>
           </div>
-        </Tarjeta>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <Metrica etiqueta="Producción" valor={`${resumen.unidadesProducidas} u`} />
+            <Metrica etiqueta="Entregas" valor={String(resumen.numEntregas)} />
+            <Metrica etiqueta="Ingresos" valor={formatDinero(resumen.ingresos)} />
+            <Metrica etiqueta="Costo" valor={formatDinero(resumen.costoProduccion)} />
+            <Metrica etiqueta="Margen" valor={formatDinero(resumen.margen)} destacar />
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-3 pt-1">
           <Atajo to="/compras" icono="🧾" texto="Compras" />

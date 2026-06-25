@@ -51,6 +51,24 @@ export function recetaDe(productoId: ID, recetas: RecetaItem[]): RecetaItem[] {
   return recetas.filter((r) => r.productoId === productoId);
 }
 
+/**
+ * Inventario de producto terminado: unidades producidas − unidades entregadas,
+ * por producto. Sirve para no permitir entregar pan que no se ha producido.
+ */
+export function inventarioPorProducto(
+  producciones: Pick<Produccion, 'productoId' | 'cantidadUnidades'>[],
+  entregaItems: Pick<EntregaItem, 'productoId' | 'cantidad'>[],
+): Map<ID, number> {
+  const m = new Map<ID, number>();
+  for (const p of producciones) {
+    m.set(p.productoId, (m.get(p.productoId) ?? 0) + p.cantidadUnidades);
+  }
+  for (const it of entregaItems) {
+    m.set(it.productoId, (m.get(it.productoId) ?? 0) - it.cantidad);
+  }
+  return m;
+}
+
 export function resumenPeriodo(input: ResumenInput): ResumenPeriodo {
   const { desde, hasta } = input;
   const unidadPorInsumo = new Map<ID, UnidadBase>(

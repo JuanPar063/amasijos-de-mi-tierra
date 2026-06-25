@@ -7,7 +7,7 @@ import type {
   Produccion,
   RecetaItem,
 } from '../domain/entities';
-import { resumenPeriodo, type ResumenInput } from './resumen';
+import { inventarioPorProducto, resumenPeriodo, type ResumenInput } from './resumen';
 
 const insumos: Pick<Insumo, 'id' | 'unidadBase'>[] = [{ id: 'harina', unidadBase: 'g' }];
 const recetas: RecetaItem[] = [
@@ -55,5 +55,23 @@ describe('resumenPeriodo', () => {
 
   it('cuenta entregas del periodo', () => {
     expect(r.numEntregas).toBe(1);
+  });
+});
+
+describe('inventarioPorProducto', () => {
+  it('produccion menos entregas por producto', () => {
+    const inv = inventarioPorProducto(
+      [
+        { productoId: 'pan', cantidadUnidades: 20 },
+        { productoId: 'rosca', cantidadUnidades: 5 },
+      ],
+      [
+        { productoId: 'pan', cantidad: 8 },
+        { productoId: 'pan', cantidad: 2 },
+      ],
+    );
+    expect(inv.get('pan')).toBe(10); // 20 - 8 - 2
+    expect(inv.get('rosca')).toBe(5); // sin entregas
+    expect(inv.get('croissant')).toBeUndefined(); // sin producción
   });
 });

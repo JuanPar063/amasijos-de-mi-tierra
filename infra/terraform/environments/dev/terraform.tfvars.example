@@ -1,0 +1,2 @@
+# Copia a terraform.tfvars y ajusta. NO subas terraform.tfvars al repo.
+region = "us-east-1"

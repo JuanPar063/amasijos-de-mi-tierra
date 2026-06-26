@@ -120,8 +120,9 @@ de cada fase** para que Pardo revise antes de continuar.
   (verificado end-to-end con `docker compose up`)
 - **Fase 4** — Capacitor/APK + SQLite nativo + Filesystem/Share ✅
   (código y config completos; el autor compila el APK, ver `packages/mobile/README.md`)
-- **Fase 5** — Terraform + GitHub Actions (los **redacta** el agente; los **aplica**
-  Pardo, sección 7 del plan)
+- **Fase 5** — Terraform + GitHub Actions ✅ **redactados** (`infra/terraform/`,
+  `.github/workflows/`); los **aplica** Pardo (sección 7 del plan). El agente no
+  ejecuta `terraform apply` ni maneja credenciales de AWS.
 
 ## Límites del agente
 

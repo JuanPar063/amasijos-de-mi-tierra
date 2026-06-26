@@ -56,8 +56,10 @@ Fases 0–4 completas. Núcleo local offline/instalable (PWA) + reportes PDF, re
 JSON y cierre de mes; insumos por peso o por unidades. Versión nube (Fase 3: backend
 Express + PostgreSQL + `docker compose`, verificada end-to-end). APK Android (Fase 4:
 Capacitor + SQLite nativo + Filesystem/Share; el autor compila el APK, ver
-[`packages/mobile/README.md`](packages/mobile/README.md)). Falta la Fase 5 (Terraform
-+ CI/CD). Ver el desglose en [`CLAUDE.md`](CLAUDE.md).
+[`packages/mobile/README.md`](packages/mobile/README.md)). Fase 5 (IaC + CI/CD)
+**redactada** ([`infra/terraform/`](infra/terraform/) + [`.github/workflows/`](.github/workflows/));
+la **aplica** el autor (ver [`infra/terraform/README.md`](infra/terraform/README.md)).
+Ver el desglose en [`CLAUDE.md`](CLAUDE.md).
 
 ## Versión nube (Fase 3)
 

@@ -2,11 +2,16 @@
 
 Configuración de GitHub del proyecto.
 
-Los pipelines de CI/CD (**GitHub Actions**) se redactan en la **Fase 5** y vivirán
-en `.github/workflows/`. Previstos:
+## Workflows de CI/CD (Fase 5)
 
-- **Backend:** test → build de imagen Docker → push a ECR → update de ECS.
-- **Frontend:** build → sync a S3 → invalidación de CloudFront.
+- [`workflows/backend.yml`](workflows/backend.yml) — test → build de imagen Docker
+  → push a ECR → registra nueva task definition y actualiza el servicio de ECS.
+- [`workflows/frontend.yml`](workflows/frontend.yml) — build del frontend (modo API)
+  → sync a S3 → invalidación de CloudFront.
 
-> Nota: el directorio `workflows/` se crea al añadir el primer workflow. Para
-> subir workflows, el token/credencial de GitHub debe incluir el scope `workflow`.
+Se disparan al hacer push a `main` (según los archivos que cambian) o manualmente.
+Requieren los secretos/variables configurados en *Settings → Secrets and variables
+→ Actions* (ver [`infra/terraform/README.md`](../infra/terraform/README.md)).
+
+> Para subir/editar estos workflows, el token o credencial de GitHub debe incluir
+> el scope **`workflow`** (un PAT solo con `repo` no puede modificarlos).

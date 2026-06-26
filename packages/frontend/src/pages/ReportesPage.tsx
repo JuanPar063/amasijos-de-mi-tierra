@@ -20,7 +20,7 @@ import { useRepository } from '../storage/repo-context';
 import { descargarJSON, leerArchivoJSON, selloFecha } from '../lib/archivo';
 import type { VentaProducto } from '../lib/pdf';
 import { cargarCatalogoInicial } from '../data/seed';
-import { formatFecha, hoyISO, inicioDeMesISO } from '../lib/format';
+import { diasEntre, formatFecha, hoyISO, inicioDeMesISO } from '../lib/format';
 
 function ventasPorProducto(
   entregas: Entrega[],
@@ -62,15 +62,18 @@ export function ReportesPage() {
   // pdfmake se carga de forma diferida: el shell inicial no lo descarga.
   async function generarReporte(d: string, h: string) {
     const { construirReportePeriodo, descargarPDF } = await import('../lib/pdf');
-    const resumen = resumenPeriodo({
-      desde: d,
-      hasta: h,
-      producciones,
-      recetas,
-      compras,
-      entregas,
-      entregaItems,
-      insumos,
+    const datos = { producciones, recetas, compras, entregas, entregaItems, insumos };
+    const resumen = resumenPeriodo({ ...datos, desde: d, hasta: h });
+    // Detalle día por día dentro del rango.
+    const porDia = diasEntre(d, h).map((fecha) => {
+      const rd = resumenPeriodo({ ...datos, desde: fecha, hasta: fecha });
+      return {
+        fecha,
+        producido: rd.unidadesProducidas,
+        ingresos: rd.ingresos,
+        costo: rd.costoProduccion,
+        margen: rd.margen,
+      };
     });
     const doc = construirReportePeriodo({
       desde: d,
@@ -79,6 +82,7 @@ export function ReportesPage() {
       productos,
       insumos,
       ventasPorProducto: ventasPorProducto(entregas, entregaItems, d, h),
+      porDia,
     });
     await descargarPDF(doc, `reporte-${d}_${h}.pdf`);
   }

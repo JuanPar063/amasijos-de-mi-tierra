@@ -35,6 +35,18 @@ export function formatFecha(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Lista de días ISO (inclusive) entre desde y hasta. */
+export function diasEntre(desde: string, hasta: string): string[] {
+  const out: string[] = [];
+  const d = new Date(`${desde}T00:00:00`);
+  const fin = new Date(`${hasta}T00:00:00`);
+  while (d <= fin) {
+    out.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 /** Formatea un valor como pesos colombianos sin decimales. */
 export function formatDinero(valor: number): string {
   return valor.toLocaleString('es-CO', {

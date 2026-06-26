@@ -24,6 +24,14 @@ export interface VentaProducto {
   ingresos: number;
 }
 
+export interface DiaReporte {
+  fecha: string;
+  producido: number;
+  ingresos: number;
+  costo: number;
+  margen: number;
+}
+
 export interface DatosReporte {
   desde: string;
   hasta: string;
@@ -31,6 +39,7 @@ export interface DatosReporte {
   productos: Producto[];
   insumos: Insumo[];
   ventasPorProducto: VentaProducto[];
+  porDia: DiaReporte[];
 }
 
 const COLOR = '#b45309';
@@ -102,6 +111,25 @@ export function construirReportePeriodo(d: DatosReporte): TDocumentDefinitions {
     ],
   ];
 
+  const bodyPorDia: TableCell[][] = [
+    [
+      th('Fecha'),
+      th('Producción', true),
+      th('Ingresos', true),
+      th('Costo', true),
+      th('Ganancia', true),
+    ],
+    ...(d.porDia.length > 0
+      ? d.porDia.map((x): TableCell[] => [
+          formatFecha(x.fecha),
+          { text: `${x.producido} u`, alignment: 'right' },
+          { text: formatDinero(x.ingresos), alignment: 'right' },
+          { text: formatDinero(x.costo), alignment: 'right' },
+          { text: formatDinero(x.margen), alignment: 'right', bold: true },
+        ])
+      : [vacia(5)]),
+  ];
+
   return {
     pageSize: 'A4',
     pageMargins: [40, 50, 40, 40],
@@ -128,6 +156,12 @@ export function construirReportePeriodo(d: DatosReporte): TDocumentDefinitions {
 
       seccion('Costos y margen'),
       { table: { widths: ['*', 'auto'], body: bodyCostos }, layout: 'noBorders' },
+
+      seccion('Costos y ganancias por día'),
+      {
+        table: { headerRows: 1, widths: ['auto', 'auto', '*', '*', '*'], body: bodyPorDia },
+        layout: 'lightHorizontalLines',
+      },
     ],
     footer: (pagina: number, total: number): Content => ({
       text: `página ${pagina} de ${total}`,

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { costoPorBase, formatCantidad, type NuevaCompraInsumo } from '@panaderia/shared';
+import {
+  costoPorBase,
+  costoPorBaseVigente,
+  formatCantidad,
+  type NuevaCompraInsumo,
+} from '@panaderia/shared';
 import {
   Boton,
   BotonFlotante,
@@ -30,6 +35,17 @@ export function ComprasPage() {
   const [costoTotal, setCostoTotal] = useState('');
 
   const unidadSel = porId.get(insumoId)?.unidadBase ?? 'g';
+  // Precio por unidad base del insumo (de su última compra vigente en la fecha).
+  const precioBase = useMemo(
+    () => (insumoId ? costoPorBaseVigente(insumoId, fecha, compras) : 0),
+    [insumoId, fecha, compras],
+  );
+
+  // Al cambiar la cantidad, autocompleta el costo total = cantidad × precio base.
+  function aplicarCantidad(n: number) {
+    setCantidad(n);
+    if (precioBase > 0) setCostoTotal(String(Math.round(n * precioBase)));
+  }
 
   function abrir() {
     setInsumoId(insumos[0]?.id ?? '');
@@ -109,6 +125,7 @@ export function ComprasPage() {
           onChange={(e) => {
             setInsumoId(e.target.value);
             setCantidad(0);
+            setCostoTotal('');
           }}
           opciones={insumos.map((i) => ({ valor: i.id, texto: i.nombre }))}
         />
@@ -117,17 +134,24 @@ export function ComprasPage() {
           etiqueta="Cantidad comprada"
           unidadBase={unidadSel}
           cantidad={cantidad}
-          onCantidad={setCantidad}
+          onCantidad={aplicarCantidad}
         />
-        <Campo
-          etiqueta="Costo total"
-          type="number"
-          inputMode="decimal"
-          min="0"
-          value={costoTotal}
-          onChange={(e) => setCostoTotal(e.target.value)}
-          placeholder="0"
-        />
+        <div className="flex flex-col gap-1">
+          <Campo
+            etiqueta="Costo total"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            value={costoTotal}
+            onChange={(e) => setCostoTotal(e.target.value)}
+            placeholder="0"
+          />
+          {precioBase > 0 && (
+            <span className="text-xs text-amber-600">
+              Calculado con {formatDinero(precioBase)}/{unidadSel} (último precio). Puedes ajustarlo.
+            </span>
+          )}
+        </div>
         <Boton onClick={guardar}>Guardar</Boton>
       </Sheet>
     </>

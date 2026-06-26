@@ -1,0 +1,69 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/backend/**'
+      - 'packages/shared/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck + pruebas
+        run: |
+          pnpm --filter @panaderia/backend typecheck
+          pnpm --filter @panaderia/shared test
+
+      - name: Credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login a ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build y push de la imagen
+        env:
+          ECR: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          docker build -f packages/backend/Dockerfile -t "$ECR:${{ github.sha }}" -t "$ECR:latest" .
+          docker push "$ECR:${{ github.sha }}"
+          docker push "$ECR:latest"
+
+      # Toma la task definition actual (creada por Terraform con sus roles/secretos),
+      # le cambia solo la imagen, registra una revisión nueva y actualiza el servicio.
+      - name: Desplegar en ECS
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICE: ${{ vars.ECS_SERVICE }}
+          ECR: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          TASKDEF=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$TASKDEF" \
+            --query 'taskDefinition' > taskdef.json
+          jq --arg IMG "$ECR:${{ github.sha }}" '
+            .containerDefinitions[0].image = $IMG
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)
+          ' taskdef.json > nueva.json
+          NUEVA=$(aws ecs register-task-definition --cli-input-json file://nueva.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$NUEVA"

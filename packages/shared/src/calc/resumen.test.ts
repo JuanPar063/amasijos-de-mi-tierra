@@ -16,6 +16,8 @@ const recetas: RecetaItem[] = [
 ];
 const compras: CompraInsumo[] = [
   { id: 'c1', insumoId: 'harina', fecha: '2026-06-01', cantidad: 1000, costoTotal: 2000 }, // 2/g
+  { id: 'c2', insumoId: 'harina', fecha: '2026-06-15', cantidad: 500, costoTotal: 1500 }, // dentro del rango
+  { id: 'c3', insumoId: 'harina', fecha: '2026-05-20', cantidad: 500, costoTotal: 9999 }, // fuera de rango
 ];
 const producciones: Produccion[] = [
   { id: 'pr1', fecha: '2026-06-10', hora: '07:00', productoId: 'pan', cantidadUnidades: 10 },
@@ -62,6 +64,11 @@ describe('resumenPeriodo', () => {
 
   it('cuenta entregas del periodo', () => {
     expect(r.numEntregas).toBe(1);
+  });
+
+  it('suma el gasto real en compras del periodo (excluye fuera de rango)', () => {
+    expect(r.gastoInsumos).toBe(3500); // 2000 + 1500; la compra de mayo (9999) queda fuera
+    expect(r.gastoPorInsumo).toEqual([{ insumoId: 'harina', monto: 3500 }]);
   });
 });
 

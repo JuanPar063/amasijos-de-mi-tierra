@@ -140,6 +140,28 @@ export function Dashboard() {
           </div>
         </div>
 
+        <Tarjeta>
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm font-semibold text-amber-500">
+              Gastos en insumos · {ETIQUETA_PERIODO[periodo]}
+            </p>
+            <p className="text-2xl font-bold text-amber-950">
+              {formatDinero(resumen.gastoInsumos)}
+            </p>
+          </div>
+          <p className="text-xs text-amber-400">dinero pagado en compras del periodo</p>
+          {resumen.gastoPorInsumo.length > 0 && (
+            <ul className="mt-2 text-sm text-amber-700">
+              {resumen.gastoPorInsumo.map((g) => (
+                <li key={g.insumoId} className="flex justify-between">
+                  <span>{nombreInsumo.get(g.insumoId) ?? 'Insumo'}</span>
+                  <span className="font-medium">{formatDinero(g.monto)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+
         <div className="grid grid-cols-2 gap-3 pt-1">
           <Atajo to="/compras" icono="🧾" texto="Compras" />
           <Atajo to="/tiendas" icono="🏪" texto="Tiendas" />

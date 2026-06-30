@@ -27,6 +27,10 @@ export interface ResumenPeriodo {
   produccionPorProducto: { productoId: ID; unidades: number }[];
   consumoPorInsumo: ConsumoInsumo[];
   costoProduccion: number;
+  /** Dinero realmente pagado en compras de insumos en el periodo (caja gastada). */
+  gastoInsumos: number;
+  /** Gasto en compras desglosado por insumo. */
+  gastoPorInsumo: { insumoId: ID; monto: number }[];
   /** Ingresos por entregas a tiendas. */
   ingresosTiendas: number;
   /** Ingresos por venta directa en el mostrador. */
@@ -107,6 +111,14 @@ export function resumenPeriodo(input: ResumenInput): ResumenPeriodo {
     costoProduccion += costoDeProduccion(p, receta, input.compras, unidadPorInsumo);
   }
 
+  // Gasto real en insumos = suma de compras (caja pagada) dentro del rango.
+  const gastoPorInsumoMap = new Map<ID, number>();
+  let gastoInsumos = 0;
+  for (const c of input.compras.filter((c) => enRango(c.fecha, desde, hasta))) {
+    gastoInsumos += c.costoTotal;
+    gastoPorInsumoMap.set(c.insumoId, (gastoPorInsumoMap.get(c.insumoId) ?? 0) + c.costoTotal);
+  }
+
   const ventas = input.ventasDirectas.filter((v) => enRango(v.fecha, desde, hasta));
   const ingresosTiendas = ingresosDeEntrega(items);
   const ingresosMostrador = ingresosDeVentasDirectas(ventas);
@@ -119,6 +131,8 @@ export function resumenPeriodo(input: ResumenInput): ResumenPeriodo {
     produccionPorProducto: [...porProducto].map(([productoId, unidades]) => ({ productoId, unidades })),
     consumoPorInsumo: [...consumo].map(([insumoId, cantidad]) => ({ insumoId, cantidad })),
     costoProduccion,
+    gastoInsumos,
+    gastoPorInsumo: [...gastoPorInsumoMap].map(([insumoId, monto]) => ({ insumoId, monto })),
     ingresosTiendas,
     ingresosMostrador,
     ingresos,

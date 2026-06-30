@@ -3,6 +3,7 @@ import type {
   CompraInsumo,
   EntregaItem,
   ID,
+  Insumo,
   Produccion,
   RecetaItem,
   UnidadBase,
@@ -79,4 +80,38 @@ export function costoDeProduccion(
 /** Ingresos de una entrega = Σ (cantidad × precio_unitario) de sus renglones. */
 export function ingresosDeEntrega(items: EntregaItem[]): number {
   return items.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
+}
+
+/** Ingresos de ventas directas (mostrador) = Σ (cantidad × precio_unitario). */
+export function ingresosDeVentasDirectas(
+  ventas: { cantidad: number; precioUnitario: number }[],
+): number {
+  return ventas.reduce((acc, v) => acc + v.cantidad * v.precioUnitario, 0);
+}
+
+export interface FaltanteStock {
+  insumoId: ID;
+  disponible: number;
+  necesita: number;
+}
+
+/**
+ * Verifica si hay stock suficiente para una producción. Devuelve los insumos
+ * cuyo consumo superaría el stock disponible (lista vacía = se puede producir).
+ */
+export function faltantesParaProduccion(
+  produccion: Pick<Produccion, 'cantidadUnidades' | 'mermaG'>,
+  receta: RecetaItem[],
+  insumos: Pick<Insumo, 'id' | 'stockActual' | 'unidadBase'>[],
+): FaltanteStock[] {
+  const unidad = new Map<ID, UnidadBase>(insumos.map((i) => [i.id, i.unidadBase]));
+  const stock = new Map<ID, number>(insumos.map((i) => [i.id, i.stockActual]));
+  const faltantes: FaltanteStock[] = [];
+  for (const c of consumoDeProduccion(produccion, receta, unidad)) {
+    const disponible = stock.get(c.insumoId) ?? 0;
+    if (c.cantidad - disponible > 1e-6) {
+      faltantes.push({ insumoId: c.insumoId, disponible, necesita: c.cantidad });
+    }
+  }
+  return faltantes;
 }

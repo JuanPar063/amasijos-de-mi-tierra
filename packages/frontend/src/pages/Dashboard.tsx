@@ -10,6 +10,7 @@ import {
   useProducciones,
   useProductos,
   useRecetas,
+  useVentasDirectas,
 } from '../data/hooks';
 import { formatDinero, hoyISO, inicioDeMesISO, inicioDeSemanaISO } from '../lib/format';
 
@@ -24,6 +25,7 @@ export function Dashboard() {
   const { data: compras = [] } = useCompras();
   const { data: entregas = [] } = useEntregas();
   const { data: entregaItems = [] } = useEntregaItems();
+  const { data: ventasDirectas = [] } = useVentasDirectas();
 
   const hoy = hoyISO();
   const [periodo, setPeriodo] = useState<Periodo>('dia');
@@ -36,17 +38,18 @@ export function Dashboard() {
     compras,
     entregas,
     entregaItems,
+    ventasDirectas,
     insumos,
   };
   const resumenHoy = useMemo(
     () => resumenPeriodo({ ...base, desde: hoy, hasta: hoy }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [producciones, recetas, compras, entregas, entregaItems, insumos, hoy],
+    [producciones, recetas, compras, entregas, entregaItems, ventasDirectas, insumos, hoy],
   );
   const resumen = useMemo(
     () => resumenPeriodo({ ...base, desde: desdePeriodo, hasta: hoy }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [producciones, recetas, compras, entregas, entregaItems, insumos, desdePeriodo, hoy],
+    [producciones, recetas, compras, entregas, entregaItems, ventasDirectas, insumos, desdePeriodo, hoy],
   );
 
   const nombreInsumo = useMemo(() => new Map(insumos.map((i) => [i.id, i.nombre])), [insumos]);
@@ -93,13 +96,22 @@ export function Dashboard() {
           )}
         </Tarjeta>
 
-        <Tarjeta>
-          <p className="text-sm font-semibold text-amber-500">Entregas del día</p>
-          <div className="flex items-end justify-between">
-            <p className="text-3xl font-bold text-amber-950">{resumenHoy.numEntregas}</p>
-            <p className="text-lg font-semibold text-amber-700">{formatDinero(resumenHoy.ingresos)}</p>
-          </div>
-        </Tarjeta>
+        <div className="grid grid-cols-2 gap-3">
+          <Tarjeta>
+            <p className="text-sm font-semibold text-amber-500">Entregas hoy</p>
+            <p className="text-2xl font-bold text-amber-950">{resumenHoy.numEntregas}</p>
+            <p className="text-sm font-semibold text-amber-700">
+              {formatDinero(resumenHoy.ingresosTiendas)}
+            </p>
+          </Tarjeta>
+          <Tarjeta>
+            <p className="text-sm font-semibold text-amber-500">Mostrador hoy</p>
+            <p className="text-2xl font-bold text-amber-950">
+              {formatDinero(resumenHoy.ingresosMostrador)}
+            </p>
+            <p className="text-sm text-amber-600">venta directa</p>
+          </Tarjeta>
+        </div>
 
         <div className="rounded-2xl bg-amber-700 p-4 text-white shadow-sm">
           <div className="mb-3 flex items-center justify-between">
@@ -120,9 +132,10 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Metrica etiqueta="Producción" valor={`${resumen.unidadesProducidas} u`} />
-            <Metrica etiqueta="Entregas" valor={String(resumen.numEntregas)} />
-            <Metrica etiqueta="Ingresos" valor={formatDinero(resumen.ingresos)} />
+            <Metrica etiqueta="Tiendas" valor={formatDinero(resumen.ingresosTiendas)} />
+            <Metrica etiqueta="Mostrador" valor={formatDinero(resumen.ingresosMostrador)} />
             <Metrica etiqueta="Costo" valor={formatDinero(resumen.costoProduccion)} />
+            <Metrica etiqueta="Ingresos" valor={formatDinero(resumen.ingresos)} />
             <Metrica etiqueta="Margen" valor={formatDinero(resumen.margen)} destacar />
           </div>
         </div>

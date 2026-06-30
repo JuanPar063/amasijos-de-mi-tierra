@@ -6,6 +6,7 @@ import type {
   Insumo,
   Produccion,
   RecetaItem,
+  VentaDirecta,
 } from '../domain/entities';
 import { inventarioPorProducto, resumenPeriodo, type ResumenInput } from './resumen';
 
@@ -24,6 +25,9 @@ const entregas: Entrega[] = [{ id: 'e1', fecha: '2026-06-10', hora: '09:00', tie
 const entregaItems: EntregaItem[] = [
   { id: 'i1', entregaId: 'e1', productoId: 'pan', cantidad: 8, precioUnitario: 1500 },
 ];
+const ventasDirectas: VentaDirecta[] = [
+  { id: 'v1', fecha: '2026-06-11', productoId: 'pan', cantidad: 2, precioUnitario: 2000 }, // mostrador
+];
 
 const input: ResumenInput = {
   desde: '2026-06-01',
@@ -33,6 +37,7 @@ const input: ResumenInput = {
   compras,
   entregas,
   entregaItems,
+  ventasDirectas,
   insumos,
 };
 
@@ -47,10 +52,12 @@ describe('resumenPeriodo', () => {
     expect(r.consumoPorInsumo).toEqual([{ insumoId: 'harina', cantidad: 1000 }]);
   });
 
-  it('calcula costo, ingresos y margen', () => {
+  it('separa ingresos de tiendas y mostrador, y suma el total', () => {
     expect(r.costoProduccion).toBe(2000); // 1000 g * 2
-    expect(r.ingresos).toBe(12000); // 8 * 1500
-    expect(r.margen).toBe(10000);
+    expect(r.ingresosTiendas).toBe(12000); // 8 * 1500
+    expect(r.ingresosMostrador).toBe(4000); // 2 * 2000
+    expect(r.ingresos).toBe(16000); // tiendas + mostrador
+    expect(r.margen).toBe(14000); // 16000 - 2000
   });
 
   it('cuenta entregas del periodo', () => {
@@ -59,7 +66,7 @@ describe('resumenPeriodo', () => {
 });
 
 describe('inventarioPorProducto', () => {
-  it('produccion menos entregas por producto', () => {
+  it('produccion menos entregas menos ventas de mostrador', () => {
     const inv = inventarioPorProducto(
       [
         { productoId: 'pan', cantidadUnidades: 20 },
@@ -69,9 +76,10 @@ describe('inventarioPorProducto', () => {
         { productoId: 'pan', cantidad: 8 },
         { productoId: 'pan', cantidad: 2 },
       ],
+      [{ productoId: 'pan', cantidad: 4 }], // mostrador
     );
-    expect(inv.get('pan')).toBe(10); // 20 - 8 - 2
-    expect(inv.get('rosca')).toBe(5); // sin entregas
+    expect(inv.get('pan')).toBe(6); // 20 - 8 - 2 - 4
+    expect(inv.get('rosca')).toBe(5); // sin movimientos
     expect(inv.get('croissant')).toBeUndefined(); // sin producción
   });
 });

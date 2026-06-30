@@ -12,6 +12,7 @@ import type {
   NuevaCompraInsumo,
   NuevaProduccion,
   NuevaTienda,
+  NuevaVentaDirecta,
   NuevoInsumo,
   NuevoProducto,
   NuevoRecetaItem,
@@ -20,6 +21,8 @@ import type {
   RecetaItem,
   Repository,
   Tienda,
+  VentaDirecta,
+  VentaDirectaRepo,
 } from '@panaderia/shared';
 import { db } from './db';
 
@@ -36,6 +39,12 @@ async function ajustarStock(insumoId: ID, delta: number): Promise<void> {
 async function mapaUnidades(): Promise<Map<ID, 'g' | 'u'>> {
   const insumos = await db.insumos.toArray();
   return new Map(insumos.map((i) => [i.id, i.unidadBase]));
+}
+
+/** Mapa productoId -> bolsa de domicilio (empaqueInsumoId). */
+async function mapaEmpaque(): Promise<Map<ID, ID | undefined>> {
+  const productos = await db.productos.toArray();
+  return new Map(productos.map((p) => [p.id, p.empaqueInsumoId]));
 }
 
 /**
@@ -112,6 +121,8 @@ export class LocalRepository implements Repository {
         id: nuevoId(),
         nombre: data.nombre.trim(),
         precioVenta: data.precioVenta,
+        precioMostrador: data.precioMostrador,
+        empaqueInsumoId: data.empaqueInsumoId,
       };
       await db.productos.add(producto);
       return producto;
@@ -231,31 +242,89 @@ export class LocalRepository implements Repository {
     create: async (data, items) => {
       const entrega: Entrega = { id: nuevoId(), ...data };
       const filas = items.map((it) => ({ id: nuevoId(), entregaId: entrega.id, ...it }));
-      await db.transaction('rw', db.entregas, db.entregaItems, async () => {
+      await db.transaction('rw', db.entregas, db.entregaItems, db.productos, db.insumos, async () => {
         await db.entregas.add(entrega);
         await db.entregaItems.bulkAdd(filas);
+        const empaque = await mapaEmpaque();
+        for (const it of filas) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(bolsa, -it.cantidad);
+        }
       });
       return { entrega, items: filas };
     },
     update: async (id, data, items) => {
       let resultado: EntregaConItems;
-      await db.transaction('rw', db.entregas, db.entregaItems, async () => {
+      await db.transaction('rw', db.entregas, db.entregaItems, db.productos, db.insumos, async () => {
         const prev = await db.entregas.get(id);
         if (!prev) throw new Error('Entrega no encontrada');
+        const empaque = await mapaEmpaque();
+        // reponer bolsas de los items anteriores
+        const viejos = await db.entregaItems.where('entregaId').equals(id).toArray();
+        for (const it of viejos) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(bolsa, it.cantidad);
+        }
         const entrega: Entrega = { ...prev, ...data };
         await db.entregas.put(entrega);
         await db.entregaItems.where('entregaId').equals(id).delete();
         const filas = items.map((it) => ({ id: nuevoId(), entregaId: id, ...it }));
         await db.entregaItems.bulkAdd(filas);
+        // descontar bolsas de los items nuevos
+        for (const it of filas) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(bolsa, -it.cantidad);
+        }
         resultado = { entrega, items: filas };
       });
       return resultado!;
     },
     delete: async (id) => {
-      await db.transaction('rw', db.entregas, db.entregaItems, async () => {
+      await db.transaction('rw', db.entregas, db.entregaItems, db.productos, db.insumos, async () => {
+        const empaque = await mapaEmpaque();
+        const items = await db.entregaItems.where('entregaId').equals(id).toArray();
+        for (const it of items) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(bolsa, it.cantidad);
+        }
         await db.entregaItems.where('entregaId').equals(id).delete();
         await db.entregas.delete(id);
       });
+    },
+  };
+
+  ventasDirectas: VentaDirectaRepo = {
+    list: () => db.ventasDirectas.orderBy('fecha').reverse().toArray(),
+    registrar: async (data: NuevaVentaDirecta) => {
+      let resultado: VentaDirecta;
+      await db.transaction('rw', db.ventasDirectas, async () => {
+        const existente = await db.ventasDirectas
+          .where('[fecha+productoId]')
+          .equals([data.fecha, data.productoId])
+          .first();
+        if (existente) {
+          const actualizada: VentaDirecta = {
+            ...existente,
+            cantidad: existente.cantidad + data.cantidad,
+          };
+          await db.ventasDirectas.put(actualizada);
+          resultado = actualizada;
+        } else {
+          const nueva: VentaDirecta = { id: nuevoId(), ...data };
+          await db.ventasDirectas.add(nueva);
+          resultado = nueva;
+        }
+      });
+      return resultado!;
+    },
+    setCantidad: async (id, cantidad) => {
+      await db.ventasDirectas.update(id, { cantidad });
+      const r = await db.ventasDirectas.get(id);
+      if (!r) throw new Error('Venta no encontrada');
+      return r;
+    },
+    delete: async (id) => {
+      await db.ventasDirectas.delete(id);
     },
   };
 
@@ -276,6 +345,7 @@ export class LocalRepository implements Repository {
         tiendas: await db.tiendas.toArray(),
         entregas: await db.entregas.toArray(),
         entregaItems: await db.entregaItems.toArray(),
+        ventasDirectas: await db.ventasDirectas.toArray(),
       },
     };
   }
@@ -292,6 +362,7 @@ export class LocalRepository implements Repository {
         db.tiendas,
         db.entregas,
         db.entregaItems,
+        db.ventasDirectas,
       ],
       async () => {
         await Promise.all([
@@ -303,6 +374,7 @@ export class LocalRepository implements Repository {
           db.tiendas.clear(),
           db.entregas.clear(),
           db.entregaItems.clear(),
+          db.ventasDirectas.clear(),
         ]);
         await db.insumos.bulkAdd(data.datos.insumos);
         await db.compras.bulkAdd(data.datos.compras);
@@ -312,6 +384,7 @@ export class LocalRepository implements Repository {
         await db.tiendas.bulkAdd(data.datos.tiendas);
         await db.entregas.bulkAdd(data.datos.entregas);
         await db.entregaItems.bulkAdd(data.datos.entregaItems);
+        await db.ventasDirectas.bulkAdd(data.datos.ventasDirectas ?? []);
       },
     );
   }
@@ -325,6 +398,7 @@ export class LocalRepository implements Repository {
       db.producciones,
       db.entregas,
       db.entregaItems,
+      db.ventasDirectas,
       async () => {
         await db.compras.where('fecha').belowOrEqual(filtro.hasta).delete();
         await db.producciones.where('fecha').belowOrEqual(filtro.hasta).delete();
@@ -334,6 +408,7 @@ export class LocalRepository implements Repository {
           .primaryKeys();
         await db.entregaItems.where('entregaId').anyOf(entregaIds).delete();
         await db.entregas.where('fecha').belowOrEqual(filtro.hasta).delete();
+        await db.ventasDirectas.where('fecha').belowOrEqual(filtro.hasta).delete();
       },
     );
   }

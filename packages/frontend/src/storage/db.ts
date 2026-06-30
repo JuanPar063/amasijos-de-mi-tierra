@@ -8,6 +8,7 @@ import type {
   Producto,
   RecetaItem,
   Tienda,
+  VentaDirecta,
 } from '@panaderia/shared';
 
 /** Base de datos local (IndexedDB) de la versión práctica/offline. */
@@ -20,6 +21,7 @@ export class PanaderiaDB extends Dexie {
   tiendas!: Table<Tienda, string>;
   entregas!: Table<Entrega, string>;
   entregaItems!: Table<EntregaItem, string>;
+  ventasDirectas!: Table<VentaDirecta, string>;
 
   constructor() {
     super('panaderia');
@@ -65,6 +67,13 @@ export class PanaderiaDB extends Dexie {
             delete r.cantidadG;
           });
       });
+
+    // v3: venta directa en el mostrador (acumulado por día + producto).
+    // El índice compuesto [fecha+productoId] permite sumar a la fila del día.
+    this.version(3).stores({
+      ...stores,
+      ventasDirectas: 'id, fecha, productoId, [fecha+productoId]',
+    });
   }
 }
 

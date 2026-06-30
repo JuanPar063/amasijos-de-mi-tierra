@@ -10,11 +10,13 @@ import type {
   Produccion,
   RecetaItem,
   UnidadBase,
+  VentaDirecta,
 } from '../domain/entities';
 import {
   consumoDeProduccion,
   costoDeProduccion,
   ingresosDeEntrega,
+  ingresosDeVentasDirectas,
   type ConsumoInsumo,
 } from './costos';
 
@@ -25,6 +27,11 @@ export interface ResumenPeriodo {
   produccionPorProducto: { productoId: ID; unidades: number }[];
   consumoPorInsumo: ConsumoInsumo[];
   costoProduccion: number;
+  /** Ingresos por entregas a tiendas. */
+  ingresosTiendas: number;
+  /** Ingresos por venta directa en el mostrador. */
+  ingresosMostrador: number;
+  /** Ingresos totales (tiendas + mostrador). */
   ingresos: number;
   margen: number;
   numEntregas: number;
@@ -38,6 +45,7 @@ export interface ResumenInput {
   compras: CompraInsumo[];
   entregas: Entrega[];
   entregaItems: EntregaItem[];
+  ventasDirectas: VentaDirecta[];
   /** Insumos, para resolver la unidad base (afecta la distribución de merma). */
   insumos: Pick<Insumo, 'id' | 'unidadBase'>[];
 }
@@ -58,6 +66,7 @@ export function recetaDe(productoId: ID, recetas: RecetaItem[]): RecetaItem[] {
 export function inventarioPorProducto(
   producciones: Pick<Produccion, 'productoId' | 'cantidadUnidades'>[],
   entregaItems: Pick<EntregaItem, 'productoId' | 'cantidad'>[],
+  ventasDirectas: Pick<VentaDirecta, 'productoId' | 'cantidad'>[] = [],
 ): Map<ID, number> {
   const m = new Map<ID, number>();
   for (const p of producciones) {
@@ -65,6 +74,9 @@ export function inventarioPorProducto(
   }
   for (const it of entregaItems) {
     m.set(it.productoId, (m.get(it.productoId) ?? 0) - it.cantidad);
+  }
+  for (const v of ventasDirectas) {
+    m.set(v.productoId, (m.get(v.productoId) ?? 0) - v.cantidad);
   }
   return m;
 }
@@ -95,7 +107,10 @@ export function resumenPeriodo(input: ResumenInput): ResumenPeriodo {
     costoProduccion += costoDeProduccion(p, receta, input.compras, unidadPorInsumo);
   }
 
-  const ingresos = ingresosDeEntrega(items);
+  const ventas = input.ventasDirectas.filter((v) => enRango(v.fecha, desde, hasta));
+  const ingresosTiendas = ingresosDeEntrega(items);
+  const ingresosMostrador = ingresosDeVentasDirectas(ventas);
+  const ingresos = ingresosTiendas + ingresosMostrador;
 
   return {
     desde,
@@ -104,6 +119,8 @@ export function resumenPeriodo(input: ResumenInput): ResumenPeriodo {
     produccionPorProducto: [...porProducto].map(([productoId, unidades]) => ({ productoId, unidades })),
     consumoPorInsumo: [...consumo].map(([insumoId, cantidad]) => ({ insumoId, cantidad })),
     costoProduccion,
+    ingresosTiendas,
+    ingresosMostrador,
     ingresos,
     margen: ingresos - costoProduccion,
     numEntregas: entregas.length,

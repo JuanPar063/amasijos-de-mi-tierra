@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { NuevoProducto, NuevoRecetaItem, Producto } from '@panaderia/shared';
+import {
+  costoPorBaseVigente,
+  type NuevoProducto,
+  type NuevoRecetaItem,
+  type Producto,
+} from '@panaderia/shared';
 import {
   Boton,
   BotonFlotante,
@@ -11,9 +16,10 @@ import {
   Sheet,
   Tarjeta,
 } from '../components/ui';
-import { useAccion, useInsumos, useProductos, useRecetas } from '../data/hooks';
+import { useDialog } from '../components/dialog';
+import { useAccion, useCompras, useInsumos, useProductos, useRecetas } from '../data/hooks';
 import { useRepository } from '../storage/repo-context';
-import { formatDinero } from '../lib/format';
+import { formatDinero, hoyISO } from '../lib/format';
 
 type FilaReceta = { insumoId: string; cantidad: number };
 
@@ -22,6 +28,8 @@ export function ProductosPage() {
   const { data: productos = [] } = useProductos();
   const { data: insumos = [] } = useInsumos();
   const { data: recetas = [] } = useRecetas();
+  const { data: compras = [] } = useCompras();
+  const { confirmar } = useDialog();
 
   const guardarProducto = useAccion(
     (r, a: { id?: string; data: NuevoProducto; receta: NuevoRecetaItem[] }) =>
@@ -43,12 +51,32 @@ export function ProductosPage() {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState('');
   const [precio, setPrecio] = useState('');
+  const [precioMostrador, setPrecioMostrador] = useState('');
+  const [empaqueInsumoId, setEmpaqueInsumoId] = useState('');
   const [filas, setFilas] = useState<FilaReceta[]>([]);
+
+  // Las bolsas son insumos por unidad ('u').
+  const bolsas = insumos.filter((i) => i.unidadBase === 'u');
+
+  // Costo por unidad del producto = Σ (cantidad de receta × costo vigente del insumo).
+  const costoUnitario = useMemo(
+    () =>
+      filas.reduce(
+        (acc, f) =>
+          f.insumoId && f.cantidad > 0
+            ? acc + f.cantidad * costoPorBaseVigente(f.insumoId, hoyISO(), compras)
+            : acc,
+        0,
+      ),
+    [filas, compras],
+  );
 
   function abrirNuevo() {
     setEditando(null);
     setNombre('');
     setPrecio('');
+    setPrecioMostrador('');
+    setEmpaqueInsumoId('');
     setFilas([]);
     setAbierto(true);
   }
@@ -56,6 +84,8 @@ export function ProductosPage() {
     setEditando(p);
     setNombre(p.nombre);
     setPrecio(String(p.precioVenta));
+    setPrecioMostrador(p.precioMostrador != null ? String(p.precioMostrador) : '');
+    setEmpaqueInsumoId(p.empaqueInsumoId ?? '');
     const receta = await repo.recetas.getByProducto(p.id);
     setFilas(receta.map((r) => ({ insumoId: r.insumoId, cantidad: r.cantidad })));
     setAbierto(true);
@@ -76,7 +106,12 @@ export function ProductosPage() {
     const receta = filas.filter((f) => f.insumoId && f.cantidad > 0);
     guardarProducto.mutate({
       id: editando?.id,
-      data: { nombre, precioVenta: Number(precio) || 0 },
+      data: {
+        nombre,
+        precioVenta: Number(precio) || 0,
+        precioMostrador: precioMostrador ? Number(precioMostrador) : undefined,
+        empaqueInsumoId: empaqueInsumoId || undefined,
+      },
       receta,
     });
     setAbierto(false);
@@ -108,8 +143,9 @@ export function ProductosPage() {
                     ✏️
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`¿Borrar ${p.nombre}?`)) borrar.mutate(p.id);
+                    onClick={async () => {
+                      if (await confirmar(`¿Borrar ${p.nombre}?`, { peligro: true, textoConfirmar: 'Borrar' }))
+                        borrar.mutate(p.id);
                     }}
                     className="p-2 text-xl"
                     aria-label="Borrar"
@@ -136,15 +172,37 @@ export function ProductosPage() {
           onChange={(e) => setNombre(e.target.value)}
           placeholder="Pan francés"
         />
-        <Campo
-          etiqueta="Precio de venta"
-          type="number"
-          inputMode="decimal"
-          min="0"
-          value={precio}
-          onChange={(e) => setPrecio(e.target.value)}
-          placeholder="0"
-        />
+        <div className="flex gap-2">
+          <Campo
+            etiqueta="Precio a tiendas"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            value={precio}
+            onChange={(e) => setPrecio(e.target.value)}
+            placeholder="0"
+            className="flex-1"
+          />
+          <Campo
+            etiqueta="Precio en mostrador"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            value={precioMostrador}
+            onChange={(e) => setPrecioMostrador(e.target.value)}
+            placeholder="(= tiendas)"
+            className="flex-1"
+          />
+        </div>
+        {bolsas.length > 0 && (
+          <CampoSelector
+            etiqueta="Bolsa al entregar (domicilio)"
+            value={empaqueInsumoId}
+            onChange={(e) => setEmpaqueInsumoId(e.target.value)}
+            opciones={bolsas.map((b) => ({ valor: b.id, texto: b.nombre }))}
+            placeholder="(ninguna)"
+          />
+        )}
 
         <div className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-amber-900">Receta (por unidad)</p>
@@ -181,6 +239,13 @@ export function ProductosPage() {
             </Boton>
           )}
         </div>
+
+        {costoUnitario > 0 && (
+          <div className="flex items-center justify-between rounded-xl bg-amber-100 px-4 py-3 text-sm font-medium text-amber-900">
+            <span>Costo por unidad (insumos)</span>
+            <span className="font-bold">{formatDinero(costoUnitario)}</span>
+          </div>
+        )}
 
         <Boton onClick={guardar}>Guardar</Boton>
       </Sheet>

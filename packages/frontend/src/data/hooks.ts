@@ -16,6 +16,7 @@ export const qk = {
   tiendas: ['tiendas'] as const,
   entregas: ['entregas'] as const,
   entregaItems: ['entregaItems'] as const,
+  ventasDirectas: ['ventasDirectas'] as const,
 };
 
 function useInvalidarTodo(): () => void {
@@ -78,4 +79,8 @@ export function useEntregas() {
 export function useEntregaItems() {
   const repo = useRepository();
   return useQuery({ queryKey: qk.entregaItems, queryFn: () => repo.entregas.listItems() });
+}
+export function useVentasDirectas() {
+  const repo = useRepository();
+  return useQuery({ queryKey: qk.ventasDirectas, queryFn: () => repo.ventasDirectas.list() });
 }

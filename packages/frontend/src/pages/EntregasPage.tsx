@@ -16,6 +16,7 @@ import {
   Sheet,
   Tarjeta,
 } from '../components/ui';
+import { useDialog } from '../components/dialog';
 import {
   useAccion,
   useEntregaItems,
@@ -23,6 +24,7 @@ import {
   useProducciones,
   useProductos,
   useTiendas,
+  useVentasDirectas,
 } from '../data/hooks';
 import { ahoraHHMM, formatDinero, formatFecha, hoyISO } from '../lib/format';
 
@@ -34,17 +36,15 @@ export function EntregasPage() {
   const { data: tiendas = [] } = useTiendas();
   const { data: productos = [] } = useProductos();
   const { data: producciones = [] } = useProducciones();
+  const { data: ventasDirectas = [] } = useVentasDirectas();
+  const { alertar, confirmar } = useDialog();
 
-  // Inventario de producto terminado (producido − entregado). Solo se puede
-  // entregar lo que se ha producido y no se ha entregado aún.
+  // Inventario de pan disponible (acumulado): producido − entregado − vendido.
   const inventario = useMemo(
-    () => inventarioPorProducto(producciones, items),
-    [producciones, items],
+    () => inventarioPorProducto(producciones, items, ventasDirectas),
+    [producciones, items, ventasDirectas],
   );
-  const productosDisponibles = useMemo(
-    () => productos.filter((p) => (inventario.get(p.id) ?? 0) > 0),
-    [productos, inventario],
-  );
+  const disponible = (id: string) => Math.max(0, Math.floor(inventario.get(id) ?? 0));
 
   const crear = useAccion(
     (repo, a: { data: NuevaEntrega; items: NuevoEntregaItem[] }) =>
@@ -81,7 +81,7 @@ export function EntregasPage() {
     setAbierto(true);
   }
   function agregarFila() {
-    const primero = productosDisponibles[0];
+    const primero = productos[0];
     setFilas((f) => [
       ...f,
       { productoId: primero?.id ?? '', cantidad: 1, precioUnitario: primero?.precioVenta ?? 0 },
@@ -93,9 +93,30 @@ export function EntregasPage() {
   function quitarFila(idx: number) {
     setFilas((f) => f.filter((_, i) => i !== idx));
   }
-  function guardar() {
+  async function guardar() {
     const validas = filas.filter((f) => f.productoId && f.cantidad > 0);
     if (!tiendaId || validas.length === 0) return;
+    // Suma por producto y valida que no exceda lo disponible.
+    const pedidoPorProducto = new Map<string, number>();
+    for (const f of validas) {
+      pedidoPorProducto.set(f.productoId, (pedidoPorProducto.get(f.productoId) ?? 0) + f.cantidad);
+    }
+    const faltantes: string[] = [];
+    for (const [pid, pedido] of pedidoPorProducto) {
+      if (pedido > (inventario.get(pid) ?? 0)) {
+        const nom = productos.find((p) => p.id === pid)?.nombre ?? 'Producto';
+        faltantes.push(`• ${nom}: entregas ${pedido}, hay ${disponible(pid)}`);
+      }
+    }
+    if (faltantes.length > 0) {
+      await alertar(
+        `No hay suficiente pan producido para esta entrega:\n\n${faltantes.join(
+          '\n',
+        )}\n\nProduce primero o reduce las cantidades.`,
+        { titulo: 'Pan insuficiente' },
+      );
+      return;
+    }
     crear.mutate({ data: { tiendaId, fecha, hora }, items: validas });
     setAbierto(false);
   }
@@ -116,12 +137,6 @@ export function EntregasPage() {
           icono="🚲"
           titulo="Falta información"
           descripcion="Necesitas al menos una tienda y un producto para registrar entregas."
-        />
-      ) : entregas.length === 0 && productosDisponibles.length === 0 ? (
-        <PantallaVacia
-          icono="👨‍🍳"
-          titulo="Sin pan para entregar"
-          descripcion="Primero registra producción: solo puedes entregar pan que se haya producido."
         />
       ) : entregas.length === 0 ? (
         <PantallaVacia icono="🚲" titulo="Sin entregas" descripcion="Registra una entrega a una tienda." />
@@ -144,8 +159,9 @@ export function EntregasPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => {
-                      if (window.confirm('¿Borrar esta entrega?')) borrar.mutate(e.id);
+                    onClick={async () => {
+                      if (await confirmar('¿Borrar esta entrega?', { peligro: true, textoConfirmar: 'Borrar' }))
+                        borrar.mutate(e.id);
                     }}
                     className="p-2 text-xl"
                     aria-label="Borrar"
@@ -159,7 +175,7 @@ export function EntregasPage() {
         </div>
       )}
 
-      {tiendas.length > 0 && productosDisponibles.length > 0 && (
+      {tiendas.length > 0 && productos.length > 0 && (
         <BotonFlotante onClick={abrir} texto="+ Registrar entrega" />
       )}
 
@@ -207,9 +223,9 @@ export function EntregasPage() {
                       precioUnitario: precioProducto.get(e.target.value) ?? fila.precioUnitario,
                     })
                   }
-                  opciones={productosDisponibles.map((p) => ({
+                  opciones={productos.map((p) => ({
                     valor: p.id,
-                    texto: `${p.nombre} (disp. ${inventario.get(p.id) ?? 0})`,
+                    texto: `${p.nombre} (disp. ${disponible(p.id)})`,
                   }))}
                 />
                 <div className="flex gap-2">

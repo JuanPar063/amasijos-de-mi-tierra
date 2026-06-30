@@ -7,6 +7,7 @@ import { ProductosPage } from './pages/ProductosPage';
 import { ProduccionPage } from './pages/ProduccionPage';
 import { TiendasPage } from './pages/TiendasPage';
 import { EntregasPage } from './pages/EntregasPage';
+import { MostradorPage } from './pages/MostradorPage';
 import { ReportesPage } from './pages/ReportesPage';
 
 // HashRouter: funciona en hosting estático (GitHub/Cloudflare Pages) y offline
@@ -20,6 +21,7 @@ const router = createHashRouter([
       { path: '/compras', element: <ComprasPage /> },
       { path: '/productos', element: <ProductosPage /> },
       { path: '/produccion', element: <ProduccionPage /> },
+      { path: '/mostrador', element: <MostradorPage /> },
       { path: '/tiendas', element: <TiendasPage /> },
       { path: '/entregas', element: <EntregasPage /> },
       { path: '/reportes', element: <ReportesPage /> },

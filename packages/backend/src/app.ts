@@ -119,6 +119,29 @@ export function crearApp(repo: Repository = new PgRepository()): express.Express
     }),
   );
 
+  // Ventas directas (mostrador): acumulado por día y producto.
+  api.get(
+    '/ventas-directas',
+    ah(async (_req, res) => res.json(await repo.ventasDirectas.list())),
+  );
+  api.post(
+    '/ventas-directas',
+    ah(async (req, res) => res.status(201).json(await repo.ventasDirectas.registrar(req.body))),
+  );
+  api.patch(
+    '/ventas-directas/:id',
+    ah(async (req, res) =>
+      res.json(await repo.ventasDirectas.setCantidad(req.params.id, req.body.cantidad)),
+    ),
+  );
+  api.delete(
+    '/ventas-directas/:id',
+    ah(async (req, res) => {
+      await repo.ventasDirectas.delete(req.params.id);
+      return res.status(204).end();
+    }),
+  );
+
   // Mantenimiento de datos
   api.get(
     '/backup',

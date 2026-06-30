@@ -12,6 +12,7 @@ import type {
   NuevaEntrega,
   NuevaProduccion,
   NuevaTienda,
+  NuevaVentaDirecta,
   NuevoEntregaItem,
   NuevoInsumo,
   NuevoProducto,
@@ -20,6 +21,7 @@ import type {
   Producto,
   RecetaItem,
   Tienda,
+  VentaDirecta,
 } from '../domain/entities';
 
 /** CRUD genérico. `N` es el tipo de datos para crear (sin id ni campos derivados). */
@@ -28,6 +30,17 @@ export interface CrudRepo<T extends { id: ID }, N> {
   get(id: ID): Promise<T | null>;
   create(data: N): Promise<T>;
   update(id: ID, data: Partial<N>): Promise<T>;
+  delete(id: ID): Promise<void>;
+}
+
+/**
+ * Venta directa en el mostrador, acumulada por día y producto. `registrar` suma
+ * a la fila de (fecha, productoId) en vez de crear un registro por venta.
+ */
+export interface VentaDirectaRepo {
+  list(): Promise<VentaDirecta[]>;
+  registrar(data: NuevaVentaDirecta): Promise<VentaDirecta>;
+  setCantidad(id: ID, cantidad: number): Promise<VentaDirecta>;
   delete(id: ID): Promise<void>;
 }
 
@@ -66,6 +79,7 @@ export interface BackupJSON {
     tiendas: Tienda[];
     entregas: Entrega[];
     entregaItems: EntregaItem[];
+    ventasDirectas: VentaDirecta[];
   };
 }
 
@@ -86,6 +100,7 @@ export interface Repository {
   producciones: CrudRepo<Produccion, NuevaProduccion>;
   tiendas: CrudRepo<Tienda, NuevaTienda>;
   entregas: EntregaRepo;
+  ventasDirectas: VentaDirectaRepo;
 
   // Mantenimiento de datos
   exportarBackup(): Promise<BackupJSON>;

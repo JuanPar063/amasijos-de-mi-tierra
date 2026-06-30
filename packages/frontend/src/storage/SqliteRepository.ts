@@ -19,6 +19,7 @@ import type {
   NuevaEntrega,
   NuevaProduccion,
   NuevaTienda,
+  NuevaVentaDirecta,
   NuevoEntregaItem,
   NuevoInsumo,
   NuevoProducto,
@@ -30,6 +31,8 @@ import type {
   Repository,
   Tienda,
   UnidadBase,
+  VentaDirecta,
+  VentaDirectaRepo,
 } from '@panaderia/shared';
 
 const SCHEMA = `
@@ -41,7 +44,8 @@ CREATE TABLE IF NOT EXISTS compras_insumo (
   fecha TEXT NOT NULL, cantidad REAL NOT NULL, costo_total REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS productos (
-  id TEXT PRIMARY KEY, nombre TEXT NOT NULL, precio_venta REAL NOT NULL DEFAULT 0
+  id TEXT PRIMARY KEY, nombre TEXT NOT NULL, precio_venta REAL NOT NULL DEFAULT 0,
+  precio_mostrador REAL, empaque_insumo_id TEXT
 );
 CREATE TABLE IF NOT EXISTS recetas (
   id TEXT PRIMARY KEY, producto_id TEXT NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
@@ -61,11 +65,19 @@ CREATE TABLE IF NOT EXISTS entrega_items (
   id TEXT PRIMARY KEY, entrega_id TEXT NOT NULL REFERENCES entregas(id) ON DELETE CASCADE,
   producto_id TEXT NOT NULL, cantidad REAL NOT NULL, precio_unitario REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ventas_directas (
+  id TEXT PRIMARY KEY, fecha TEXT NOT NULL, producto_id TEXT NOT NULL,
+  cantidad REAL NOT NULL, precio_unitario REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_venta_dia ON ventas_directas(fecha, producto_id);
 `;
 
 const SEL_INSUMO = 'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual"';
 const SEL_COMPRA = 'id, insumo_id AS "insumoId", fecha, cantidad, costo_total AS "costoTotal"';
-const SEL_PRODUCTO = 'id, nombre, precio_venta AS "precioVenta"';
+const SEL_PRODUCTO =
+  'id, nombre, precio_venta AS "precioVenta", precio_mostrador AS "precioMostrador", empaque_insumo_id AS "empaqueInsumoId"';
+const SEL_VENTA =
+  'id, fecha, producto_id AS "productoId", cantidad, precio_unitario AS "precioUnitario"';
 const SEL_RECETA = 'id, producto_id AS "productoId", insumo_id AS "insumoId", cantidad';
 const SEL_PRODUCCION =
   'id, fecha, hora, producto_id AS "productoId", cantidad_unidades AS "cantidadUnidades", merma_g AS "mermaG"';
@@ -124,6 +136,25 @@ export class SqliteRepository implements Repository {
     if (!(await this.db.isDBOpen()).result) await this.db.open();
     await this.db.execute('PRAGMA foreign_keys = ON;');
     await this.db.execute(SCHEMA);
+    // Migración para BD ya existentes: agrega columnas si faltan (ignora el error si ya están).
+    for (const ddl of [
+      'ALTER TABLE productos ADD COLUMN precio_mostrador REAL;',
+      'ALTER TABLE productos ADD COLUMN empaque_insumo_id TEXT;',
+    ]) {
+      try {
+        await this.db.execute(ddl);
+      } catch {
+        // la columna ya existe
+      }
+    }
+  }
+
+  /** Mapa productoId -> bolsa de domicilio. */
+  private async mapaEmpaque(): Promise<Map<ID, ID | undefined>> {
+    const filas = await this.q<{ id: ID; empaqueInsumoId: ID | null }>(
+      'SELECT id, empaque_insumo_id AS "empaqueInsumoId" FROM productos',
+    );
+    return new Map(filas.map((f) => [f.id, f.empaqueInsumoId ?? undefined]));
   }
 
   private async q<T>(stmt: string, values: unknown[] = []): Promise<T[]> {
@@ -237,23 +268,33 @@ export class SqliteRepository implements Repository {
     list: () => this.q<Producto>(`SELECT ${SEL_PRODUCTO} FROM productos ORDER BY nombre`),
     get: async (id) => uno(await this.q<Producto>(`SELECT ${SEL_PRODUCTO} FROM productos WHERE id = ?`, [id])),
     create: async (data) => {
-      const producto: Producto = { id: nuevoId(), nombre: data.nombre.trim(), precioVenta: data.precioVenta };
-      await this.run('INSERT INTO productos (id, nombre, precio_venta) VALUES (?, ?, ?)', [
-        producto.id,
-        producto.nombre,
-        producto.precioVenta,
-      ]);
+      const producto: Producto = {
+        id: nuevoId(),
+        nombre: data.nombre.trim(),
+        precioVenta: data.precioVenta,
+        precioMostrador: data.precioMostrador,
+        empaqueInsumoId: data.empaqueInsumoId,
+      };
+      await this.run(
+        'INSERT INTO productos (id, nombre, precio_venta, precio_mostrador, empaque_insumo_id) VALUES (?, ?, ?, ?, ?)',
+        [
+          producto.id,
+          producto.nombre,
+          producto.precioVenta,
+          producto.precioMostrador ?? null,
+          producto.empaqueInsumoId ?? null,
+        ],
+      );
       return producto;
     },
     update: async (id, patch) => {
       const cur = await this.productos.get(id);
       if (!cur) throw new Error('Producto no encontrado');
       const next: Producto = { ...cur, ...patch };
-      await this.run('UPDATE productos SET nombre = ?, precio_venta = ? WHERE id = ?', [
-        next.nombre,
-        next.precioVenta,
-        id,
-      ]);
+      await this.run(
+        'UPDATE productos SET nombre = ?, precio_venta = ?, precio_mostrador = ?, empaque_insumo_id = ? WHERE id = ?',
+        [next.nombre, next.precioVenta, next.precioMostrador ?? null, next.empaqueInsumoId ?? null, id],
+      );
       return next;
     },
     delete: async (id) => {
@@ -396,12 +437,15 @@ export class SqliteRepository implements Repository {
           entrega.hora,
           entrega.tiendaId,
         ], false);
+        const empaque = await this.mapaEmpaque();
         for (const it of filas) {
           await this.run(
             'INSERT INTO entrega_items (id, entrega_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?, ?)',
             [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario],
             false,
           );
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await this.ajustarStock(bolsa, -it.cantidad);
         }
         return { entrega, items: filas };
       });
@@ -410,6 +454,15 @@ export class SqliteRepository implements Repository {
       return this.tx<EntregaConItems>(async () => {
         const prev = uno(await this.q<Entrega>(`SELECT ${SEL_ENTREGA} FROM entregas WHERE id = ?`, [id]));
         if (!prev) throw new Error('Entrega no encontrada');
+        const empaque = await this.mapaEmpaque();
+        const viejos = await this.q<EntregaItem>(
+          `SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items WHERE entrega_id = ?`,
+          [id],
+        );
+        for (const it of viejos) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await this.ajustarStock(bolsa, it.cantidad);
+        }
         const entrega: Entrega = { ...prev, ...data };
         await this.run('UPDATE entregas SET fecha = ?, hora = ?, tienda_id = ? WHERE id = ?', [
           entrega.fecha,
@@ -425,12 +478,54 @@ export class SqliteRepository implements Repository {
             [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario],
             false,
           );
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await this.ajustarStock(bolsa, -it.cantidad);
         }
         return { entrega, items: filas };
       });
     },
     delete: async (id) => {
-      await this.run('DELETE FROM entregas WHERE id = ?', [id]);
+      await this.tx(async () => {
+        const empaque = await this.mapaEmpaque();
+        const items = await this.q<EntregaItem>(
+          `SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items WHERE entrega_id = ?`,
+          [id],
+        );
+        for (const it of items) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await this.ajustarStock(bolsa, it.cantidad);
+        }
+        await this.run('DELETE FROM entregas WHERE id = ?', [id], false);
+      });
+    },
+  };
+
+  ventasDirectas: VentaDirectaRepo = {
+    list: () => this.q<VentaDirecta>(`SELECT ${SEL_VENTA} FROM ventas_directas ORDER BY fecha DESC`),
+    registrar: async (data: NuevaVentaDirecta) => {
+      await this.run(
+        `INSERT INTO ventas_directas (id, fecha, producto_id, cantidad, precio_unitario)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(fecha, producto_id) DO UPDATE SET cantidad = cantidad + excluded.cantidad`,
+        [nuevoId(), data.fecha, data.productoId, data.cantidad, data.precioUnitario],
+      );
+      const r = uno(
+        await this.q<VentaDirecta>(
+          `SELECT ${SEL_VENTA} FROM ventas_directas WHERE fecha = ? AND producto_id = ?`,
+          [data.fecha, data.productoId],
+        ),
+      );
+      if (!r) throw new Error('Venta no encontrada');
+      return r;
+    },
+    setCantidad: async (id, cantidad) => {
+      await this.run('UPDATE ventas_directas SET cantidad = ? WHERE id = ?', [cantidad, id]);
+      const r = uno(await this.q<VentaDirecta>(`SELECT ${SEL_VENTA} FROM ventas_directas WHERE id = ?`, [id]));
+      if (!r) throw new Error('Venta no encontrada');
+      return r;
+    },
+    delete: async (id) => {
+      await this.run('DELETE FROM ventas_directas WHERE id = ?', [id]);
     },
   };
 
@@ -447,6 +542,7 @@ export class SqliteRepository implements Repository {
         tiendas: (await this.q<RawTienda>(`SELECT ${SEL_TIENDA} FROM tiendas`)).map(mapTienda),
         entregas: await this.q<Entrega>(`SELECT ${SEL_ENTREGA} FROM entregas`),
         entregaItems: await this.q<EntregaItem>(`SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items`),
+        ventasDirectas: await this.q<VentaDirecta>(`SELECT ${SEL_VENTA} FROM ventas_directas`),
       },
     };
   }
@@ -454,7 +550,7 @@ export class SqliteRepository implements Repository {
   async importarBackup(data: BackupJSON): Promise<void> {
     const d = data.datos;
     await this.tx(async () => {
-      for (const t of ['entrega_items', 'entregas', 'producciones', 'recetas', 'productos', 'compras_insumo', 'tiendas', 'insumos']) {
+      for (const t of ['ventas_directas', 'entrega_items', 'entregas', 'producciones', 'recetas', 'productos', 'compras_insumo', 'tiendas', 'insumos']) {
         await this.run(`DELETE FROM ${t}`, [], false);
       }
       for (const i of d.insumos)
@@ -462,7 +558,7 @@ export class SqliteRepository implements Repository {
       for (const x of d.compras)
         await this.run('INSERT INTO compras_insumo (id, insumo_id, fecha, cantidad, costo_total) VALUES (?, ?, ?, ?, ?)', [x.id, x.insumoId, x.fecha, x.cantidad, x.costoTotal], false);
       for (const p of d.productos)
-        await this.run('INSERT INTO productos (id, nombre, precio_venta) VALUES (?, ?, ?)', [p.id, p.nombre, p.precioVenta], false);
+        await this.run('INSERT INTO productos (id, nombre, precio_venta, precio_mostrador, empaque_insumo_id) VALUES (?, ?, ?, ?, ?)', [p.id, p.nombre, p.precioVenta, p.precioMostrador ?? null, p.empaqueInsumoId ?? null], false);
       for (const r of d.recetas)
         await this.run('INSERT INTO recetas (id, producto_id, insumo_id, cantidad) VALUES (?, ?, ?, ?)', [r.id, r.productoId, r.insumoId, r.cantidad], false);
       for (const p of d.producciones)
@@ -473,6 +569,8 @@ export class SqliteRepository implements Repository {
         await this.run('INSERT INTO entregas (id, fecha, hora, tienda_id) VALUES (?, ?, ?, ?)', [e.id, e.fecha, e.hora, e.tiendaId], false);
       for (const it of d.entregaItems)
         await this.run('INSERT INTO entrega_items (id, entrega_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?, ?)', [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario], false);
+      for (const v of d.ventasDirectas ?? [])
+        await this.run('INSERT INTO ventas_directas (id, fecha, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?, ?)', [v.id, v.fecha, v.productoId, v.cantidad, v.precioUnitario], false);
     });
   }
 
@@ -482,6 +580,7 @@ export class SqliteRepository implements Repository {
       await this.run('DELETE FROM producciones WHERE fecha <= ?', [filtro.hasta], false);
       await this.run('DELETE FROM entrega_items WHERE entrega_id IN (SELECT id FROM entregas WHERE fecha <= ?)', [filtro.hasta], false);
       await this.run('DELETE FROM entregas WHERE fecha <= ?', [filtro.hasta], false);
+      await this.run('DELETE FROM ventas_directas WHERE fecha <= ?', [filtro.hasta], false);
     });
   }
 }

@@ -5,6 +5,7 @@ import {
   costoDeProduccion,
   costoPorBase,
   costoPorBaseVigente,
+  faltantesParaProduccion,
   ingresosDeEntrega,
 } from './costos';
 
@@ -101,6 +102,21 @@ describe('costoDeProduccion', () => {
     };
     // harina 1000g * 2 + huevo 20u * 500 = 2000 + 10000 = 12000
     expect(costoDeProduccion(prod, recetaMixta, compras, unidades)).toBe(12000);
+  });
+});
+
+describe('faltantesParaProduccion', () => {
+  // receta: harina 100 g/unidad. Stock: 350 g de harina.
+  const insumos = [{ id: 'harina', stockActual: 350, unidadBase: 'g' as const }];
+  const recetaHarina = [{ id: 'r1', productoId: 'p1', insumoId: 'harina', cantidad: 100 }];
+
+  it('alcanza para 3 (300 g <= 350 g): sin faltantes', () => {
+    expect(faltantesParaProduccion({ cantidadUnidades: 3 }, recetaHarina, insumos)).toEqual([]);
+  });
+
+  it('no alcanza para 4 (400 g > 350 g): reporta el faltante', () => {
+    const f = faltantesParaProduccion({ cantidadUnidades: 4 }, recetaHarina, insumos);
+    expect(f).toEqual([{ insumoId: 'harina', disponible: 350, necesita: 400 }]);
   });
 });
 

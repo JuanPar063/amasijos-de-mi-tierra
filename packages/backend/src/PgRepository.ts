@@ -16,6 +16,7 @@ import type {
   NuevaEntrega,
   NuevaProduccion,
   NuevaTienda,
+  NuevaVentaDirecta,
   NuevoEntregaItem,
   NuevoInsumo,
   NuevoProducto,
@@ -27,13 +28,18 @@ import type {
   Repository,
   Tienda,
   UnidadBase,
+  VentaDirecta,
+  VentaDirectaRepo,
 } from '@panaderia/shared';
 import { enTransaccion, query } from './db.js';
 
 // Listas de columnas con alias para que las filas vuelvan con las claves del dominio.
 const SEL_INSUMO = 'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual"';
 const SEL_COMPRA = 'id, insumo_id AS "insumoId", fecha, cantidad, costo_total AS "costoTotal"';
-const SEL_PRODUCTO = 'id, nombre, precio_venta AS "precioVenta"';
+const SEL_PRODUCTO =
+  'id, nombre, precio_venta AS "precioVenta", precio_mostrador AS "precioMostrador", empaque_insumo_id AS "empaqueInsumoId"';
+const SEL_VENTA =
+  'id, fecha, producto_id AS "productoId", cantidad, precio_unitario AS "precioUnitario"';
 const SEL_RECETA = 'id, producto_id AS "productoId", insumo_id AS "insumoId", cantidad';
 const SEL_PRODUCCION =
   'id, fecha, hora, producto_id AS "productoId", cantidad_unidades AS "cantidadUnidades", merma_g AS "mermaG"';
@@ -94,6 +100,14 @@ async function recetaDe(client: PoolClient, productoId: ID): Promise<RecetaItem[
     [productoId],
   );
   return r.rows;
+}
+
+/** Mapa productoId -> bolsa de domicilio (empaque). */
+async function mapaEmpaque(client: PoolClient): Promise<Map<ID, ID | undefined>> {
+  const r = await client.query<{ id: ID; empaqueInsumoId: ID | null }>(
+    'SELECT id, empaque_insumo_id AS "empaqueInsumoId" FROM productos',
+  );
+  return new Map(r.rows.map((row) => [row.id, row.empaqueInsumoId ?? undefined]));
 }
 
 /** Adaptador de almacenamiento contra PostgreSQL. Implementa el mismo contrato Repository. */
@@ -185,23 +199,29 @@ export class PgRepository implements Repository {
         id: randomUUID(),
         nombre: data.nombre.trim(),
         precioVenta: data.precioVenta,
+        precioMostrador: data.precioMostrador,
+        empaqueInsumoId: data.empaqueInsumoId,
       };
-      await query('INSERT INTO productos (id, nombre, precio_venta) VALUES ($1, $2, $3)', [
-        producto.id,
-        producto.nombre,
-        producto.precioVenta,
-      ]);
+      await query(
+        'INSERT INTO productos (id, nombre, precio_venta, precio_mostrador, empaque_insumo_id) VALUES ($1, $2, $3, $4, $5)',
+        [
+          producto.id,
+          producto.nombre,
+          producto.precioVenta,
+          producto.precioMostrador ?? null,
+          producto.empaqueInsumoId ?? null,
+        ],
+      );
       return producto;
     },
     update: async (id, patch) => {
       const cur = await this.productos.get(id);
       if (!cur) throw new Error('Producto no encontrado');
       const next: Producto = { ...cur, ...patch };
-      await query('UPDATE productos SET nombre = $2, precio_venta = $3 WHERE id = $1', [
-        id,
-        next.nombre,
-        next.precioVenta,
-      ]);
+      await query(
+        'UPDATE productos SET nombre = $2, precio_venta = $3, precio_mostrador = $4, empaque_insumo_id = $5 WHERE id = $1',
+        [id, next.nombre, next.precioVenta, next.precioMostrador ?? null, next.empaqueInsumoId ?? null],
+      );
       return next;
     },
     delete: async (id) => {
@@ -355,11 +375,14 @@ export class PgRepository implements Repository {
           entrega.hora,
           entrega.tiendaId,
         ]);
+        const empaque = await mapaEmpaque(c);
         for (const it of filas) {
           await c.query(
             'INSERT INTO entrega_items (id, entrega_id, producto_id, cantidad, precio_unitario) VALUES ($1, $2, $3, $4, $5)',
             [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario],
           );
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(c, bolsa, -it.cantidad);
         }
         return { entrega, items: filas };
       });
@@ -370,6 +393,17 @@ export class PgRepository implements Repository {
           (await c.query<Entrega>(`SELECT ${SEL_ENTREGA} FROM entregas WHERE id = $1`, [id])).rows,
         );
         if (!prev) throw new Error('Entrega no encontrada');
+        const empaque = await mapaEmpaque(c);
+        const viejos = (
+          await c.query<EntregaItem>(
+            `SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items WHERE entrega_id = $1`,
+            [id],
+          )
+        ).rows;
+        for (const it of viejos) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(c, bolsa, it.cantidad);
+        }
         const entrega: Entrega = { ...prev, ...data };
         await c.query('UPDATE entregas SET fecha = $2, hora = $3, tienda_id = $4 WHERE id = $1', [
           id,
@@ -384,12 +418,53 @@ export class PgRepository implements Repository {
             'INSERT INTO entrega_items (id, entrega_id, producto_id, cantidad, precio_unitario) VALUES ($1, $2, $3, $4, $5)',
             [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario],
           );
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(c, bolsa, -it.cantidad);
         }
         return { entrega, items: filas };
       });
     },
     delete: async (id) => {
-      await query('DELETE FROM entregas WHERE id = $1', [id]); // cascada: entrega_items
+      await enTransaccion(async (c) => {
+        const empaque = await mapaEmpaque(c);
+        const items = (
+          await c.query<EntregaItem>(
+            `SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items WHERE entrega_id = $1`,
+            [id],
+          )
+        ).rows;
+        for (const it of items) {
+          const bolsa = empaque.get(it.productoId);
+          if (bolsa) await ajustarStock(c, bolsa, it.cantidad);
+        }
+        await c.query('DELETE FROM entregas WHERE id = $1', [id]); // cascada: entrega_items
+      });
+    },
+  };
+
+  ventasDirectas: VentaDirectaRepo = {
+    list: () => query<VentaDirecta>(`SELECT ${SEL_VENTA} FROM ventas_directas ORDER BY fecha DESC`),
+    registrar: async (data: NuevaVentaDirecta) => {
+      const rows = await query<VentaDirecta>(
+        `INSERT INTO ventas_directas (id, fecha, producto_id, cantidad, precio_unitario)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (fecha, producto_id) DO UPDATE
+           SET cantidad = ventas_directas.cantidad + EXCLUDED.cantidad
+         RETURNING ${SEL_VENTA}`,
+        [randomUUID(), data.fecha, data.productoId, data.cantidad, data.precioUnitario],
+      );
+      return rows[0];
+    },
+    setCantidad: async (id, cantidad) => {
+      const rows = await query<VentaDirecta>(
+        `UPDATE ventas_directas SET cantidad = $2 WHERE id = $1 RETURNING ${SEL_VENTA}`,
+        [id, cantidad],
+      );
+      if (!rows[0]) throw new Error('Venta no encontrada');
+      return rows[0];
+    },
+    delete: async (id) => {
+      await query('DELETE FROM ventas_directas WHERE id = $1', [id]);
     },
   };
 
@@ -408,6 +483,7 @@ export class PgRepository implements Repository {
         tiendas: (await query<RawTienda>(`SELECT ${SEL_TIENDA} FROM tiendas`)).map(mapTienda),
         entregas: await query<Entrega>(`SELECT ${SEL_ENTREGA} FROM entregas`),
         entregaItems: await query<EntregaItem>(`SELECT ${SEL_ENTREGA_ITEM} FROM entrega_items`),
+        ventasDirectas: await query<VentaDirecta>(`SELECT ${SEL_VENTA} FROM ventas_directas`),
       },
     };
   }
@@ -416,7 +492,7 @@ export class PgRepository implements Repository {
     const d = data.datos;
     await enTransaccion(async (c) => {
       await c.query(
-        'TRUNCATE entrega_items, entregas, producciones, recetas, productos, compras_insumo, tiendas, insumos',
+        'TRUNCATE ventas_directas, entrega_items, entregas, producciones, recetas, productos, compras_insumo, tiendas, insumos',
       );
       for (const i of d.insumos)
         await c.query(
@@ -429,11 +505,10 @@ export class PgRepository implements Repository {
           [x.id, x.insumoId, x.fecha, x.cantidad, x.costoTotal],
         );
       for (const p of d.productos)
-        await c.query('INSERT INTO productos (id, nombre, precio_venta) VALUES ($1, $2, $3)', [
-          p.id,
-          p.nombre,
-          p.precioVenta,
-        ]);
+        await c.query(
+          'INSERT INTO productos (id, nombre, precio_venta, precio_mostrador, empaque_insumo_id) VALUES ($1, $2, $3, $4, $5)',
+          [p.id, p.nombre, p.precioVenta, p.precioMostrador ?? null, p.empaqueInsumoId ?? null],
+        );
       for (const r of d.recetas)
         await c.query(
           'INSERT INTO recetas (id, producto_id, insumo_id, cantidad) VALUES ($1, $2, $3, $4)',
@@ -463,6 +538,11 @@ export class PgRepository implements Repository {
           'INSERT INTO entrega_items (id, entrega_id, producto_id, cantidad, precio_unitario) VALUES ($1, $2, $3, $4, $5)',
           [it.id, it.entregaId, it.productoId, it.cantidad, it.precioUnitario],
         );
+      for (const v of d.ventasDirectas ?? [])
+        await c.query(
+          'INSERT INTO ventas_directas (id, fecha, producto_id, cantidad, precio_unitario) VALUES ($1, $2, $3, $4, $5)',
+          [v.id, v.fecha, v.productoId, v.cantidad, v.precioUnitario],
+        );
     });
   }
 
@@ -476,6 +556,7 @@ export class PgRepository implements Repository {
         [filtro.hasta],
       );
       await c.query('DELETE FROM entregas WHERE fecha <= $1', [filtro.hasta]);
+      await c.query('DELETE FROM ventas_directas WHERE fecha <= $1', [filtro.hasta]);
     });
   }
 }

@@ -13,6 +13,7 @@ import type {
   NuevaEntrega,
   NuevaProduccion,
   NuevaTienda,
+  NuevaVentaDirecta,
   NuevoEntregaItem,
   NuevoInsumo,
   NuevoProducto,
@@ -23,6 +24,8 @@ import type {
   RecetaRepo,
   Repository,
   Tienda,
+  VentaDirecta,
+  VentaDirectaRepo,
 } from '@panaderia/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api';
@@ -80,6 +83,14 @@ export class ApiRepository implements Repository {
     update: (id, data: Partial<NuevaEntrega>, items: NuevoEntregaItem[]) =>
       http<EntregaConItems>('PUT', `/entregas/${id}`, { data, items }),
     delete: (id) => http<void>('DELETE', `/entregas/${id}`),
+  };
+
+  ventasDirectas: VentaDirectaRepo = {
+    list: () => http<VentaDirecta[]>('GET', '/ventas-directas'),
+    registrar: (data: NuevaVentaDirecta) => http<VentaDirecta>('POST', '/ventas-directas', data),
+    setCantidad: (id, cantidad) =>
+      http<VentaDirecta>('PATCH', `/ventas-directas/${id}`, { cantidad }),
+    delete: (id) => http<void>('DELETE', `/ventas-directas/${id}`),
   };
 
   exportarBackup = () => http<BackupJSON>('GET', '/backup');

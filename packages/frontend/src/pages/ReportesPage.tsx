@@ -4,8 +4,10 @@ import {
   type BackupJSON,
   type Entrega,
   type EntregaItem,
+  type VentaDirecta,
 } from '@panaderia/shared';
 import { Boton, Campo, EncabezadoPagina, Tarjeta } from '../components/ui';
+import { useDialog } from '../components/dialog';
 import {
   useAccion,
   useCompras,
@@ -15,6 +17,7 @@ import {
   useProducciones,
   useProductos,
   useRecetas,
+  useVentasDirectas,
 } from '../data/hooks';
 import { useRepository } from '../storage/repo-context';
 import { descargarJSON, leerArchivoJSON, selloFecha } from '../lib/archivo';
@@ -25,23 +28,32 @@ import { diasEntre, formatFecha, hoyISO, inicioDeMesISO } from '../lib/format';
 function ventasPorProducto(
   entregas: Entrega[],
   items: EntregaItem[],
+  ventasDirectas: VentaDirecta[],
   desde: string,
   hasta: string,
 ): VentaProducto[] {
   const ids = new Set(entregas.filter((e) => e.fecha >= desde && e.fecha <= hasta).map((e) => e.id));
   const acc = new Map<string, { cantidad: number; ingresos: number }>();
+  const sumar = (productoId: string, cantidad: number, ingresos: number) => {
+    const prev = acc.get(productoId) ?? { cantidad: 0, ingresos: 0 };
+    prev.cantidad += cantidad;
+    prev.ingresos += ingresos;
+    acc.set(productoId, prev);
+  };
   for (const it of items) {
-    if (!ids.has(it.entregaId)) continue;
-    const prev = acc.get(it.productoId) ?? { cantidad: 0, ingresos: 0 };
-    prev.cantidad += it.cantidad;
-    prev.ingresos += it.cantidad * it.precioUnitario;
-    acc.set(it.productoId, prev);
+    if (ids.has(it.entregaId)) sumar(it.productoId, it.cantidad, it.cantidad * it.precioUnitario);
+  }
+  for (const v of ventasDirectas) {
+    if (v.fecha >= desde && v.fecha <= hasta) {
+      sumar(v.productoId, v.cantidad, v.cantidad * v.precioUnitario);
+    }
   }
   return [...acc].map(([productoId, v]) => ({ productoId, ...v }));
 }
 
 export function ReportesPage() {
   const repo = useRepository();
+  const { confirmar } = useDialog();
   const { data: insumos = [] } = useInsumos();
   const { data: productos = [] } = useProductos();
   const { data: producciones = [] } = useProducciones();
@@ -49,6 +61,7 @@ export function ReportesPage() {
   const { data: compras = [] } = useCompras();
   const { data: entregas = [] } = useEntregas();
   const { data: entregaItems = [] } = useEntregaItems();
+  const { data: ventasDirectas = [] } = useVentasDirectas();
 
   const importar = useAccion((r, data: BackupJSON) => r.importarBackup(data));
   const cerrar = useAccion((r, hasta: string) => r.borrarRegistros({ hasta }));
@@ -62,7 +75,7 @@ export function ReportesPage() {
   // pdfmake se carga de forma diferida: el shell inicial no lo descarga.
   async function generarReporte(d: string, h: string) {
     const { construirReportePeriodo, descargarPDF } = await import('../lib/pdf');
-    const datos = { producciones, recetas, compras, entregas, entregaItems, insumos };
+    const datos = { producciones, recetas, compras, entregas, entregaItems, ventasDirectas, insumos };
     const resumen = resumenPeriodo({ ...datos, desde: d, hasta: h });
     // Detalle día por día dentro del rango.
     const porDia = diasEntre(d, h).map((fecha) => {
@@ -81,7 +94,7 @@ export function ReportesPage() {
       resumen,
       productos,
       insumos,
-      ventasPorProducto: ventasPorProducto(entregas, entregaItems, d, h),
+      ventasPorProducto: ventasPorProducto(entregas, entregaItems, ventasDirectas, d, h),
       porDia,
     });
     await descargarPDF(doc, `reporte-${d}_${h}.pdf`);
@@ -98,9 +111,11 @@ export function ReportesPage() {
   }
   async function alSeleccionarArchivo(file: File) {
     if (
-      !window.confirm(
-        'Restaurar un respaldo REEMPLAZA todos los datos actuales. ¿Continuar?',
-      )
+      !(await confirmar('Restaurar un respaldo REEMPLAZA todos los datos actuales. ¿Continuar?', {
+        titulo: 'Restaurar respaldo',
+        textoConfirmar: 'Restaurar',
+        peligro: true,
+      }))
     )
       return;
     try {
@@ -115,9 +130,10 @@ export function ReportesPage() {
   async function cargarCatalogo() {
     if (
       insumos.length > 0 &&
-      !window.confirm(
+      !(await confirmar(
         `Ya hay ${insumos.length} insumo(s). Cargar el catálogo inicial puede duplicar datos. ¿Continuar?`,
-      )
+        { titulo: 'Cargar catálogo' },
+      ))
     )
       return;
     const res = await sembrar.mutateAsync();
@@ -127,11 +143,12 @@ export function ReportesPage() {
   async function cerrarMes() {
     // Principio: respaldo antes de borrar. Descargamos JSON + PDF y luego borramos.
     if (
-      !window.confirm(
+      !(await confirmar(
         `Se descargará un respaldo (JSON) y el reporte (PDF) del periodo, y luego se borrarán las compras, producciones y entregas hasta el ${formatFecha(
           hasta,
         )}. Los catálogos y el stock se conservan. ¿Continuar?`,
-      )
+        { titulo: 'Cerrar el mes', textoConfirmar: 'Cerrar periodo', peligro: true },
+      ))
     )
       return;
     const backup = await repo.exportarBackup();

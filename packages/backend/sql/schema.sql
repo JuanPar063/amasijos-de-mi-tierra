@@ -21,10 +21,15 @@ CREATE INDEX IF NOT EXISTS idx_compras_insumo ON compras_insumo(insumo_id);
 CREATE INDEX IF NOT EXISTS idx_compras_fecha ON compras_insumo(fecha);
 
 CREATE TABLE IF NOT EXISTS productos (
-  id           TEXT PRIMARY KEY,
-  nombre       TEXT NOT NULL,
-  precio_venta DOUBLE PRECISION NOT NULL DEFAULT 0
+  id               TEXT PRIMARY KEY,
+  nombre           TEXT NOT NULL,
+  precio_venta     DOUBLE PRECISION NOT NULL DEFAULT 0,
+  precio_mostrador DOUBLE PRECISION,
+  empaque_insumo_id TEXT
 );
+-- Migración para bases existentes:
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS precio_mostrador DOUBLE PRECISION;
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS empaque_insumo_id TEXT;
 
 CREATE TABLE IF NOT EXISTS recetas (
   id          TEXT PRIMARY KEY,
@@ -67,3 +72,14 @@ CREATE TABLE IF NOT EXISTS entrega_items (
   precio_unitario DOUBLE PRECISION NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_entrega_items_entrega ON entrega_items(entrega_id);
+
+-- Venta directa en el mostrador: acumulado por día y producto (una fila por par).
+CREATE TABLE IF NOT EXISTS ventas_directas (
+  id              TEXT PRIMARY KEY,
+  fecha           TEXT NOT NULL,
+  producto_id     TEXT NOT NULL,
+  cantidad        DOUBLE PRECISION NOT NULL,
+  precio_unitario DOUBLE PRECISION NOT NULL,
+  UNIQUE (fecha, producto_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_directas(fecha);

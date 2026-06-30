@@ -37,7 +37,25 @@ export interface CompraInsumo {
 export interface Producto {
   id: ID;
   nombre: string;
+  /** Precio a tiendas (entregas). Suele ser el menor. */
   precioVenta: number;
+  /** Precio al público en el mostrador (venta directa). Por defecto = precioVenta. */
+  precioMostrador?: number;
+  /** Insumo "bolsa" que se gasta (1 por unidad) al entregar este producto a domicilio. */
+  empaqueInsumoId?: ID;
+}
+
+/**
+ * Venta directa en el local (mostrador). Acumulado por día y producto:
+ * existe a lo sumo una fila por (fecha, productoId); registrar una venta suma
+ * a la cantidad del día en vez de crear un registro nuevo.
+ */
+export interface VentaDirecta {
+  id: ID;
+  fecha: string;
+  productoId: ID;
+  cantidad: number;
+  precioUnitario: number;
 }
 
 /** Un renglón de la receta (lista de materiales) de un producto. */
@@ -103,6 +121,15 @@ export interface NuevaCompraInsumo {
 export interface NuevoProducto {
   nombre: string;
   precioVenta: number;
+  precioMostrador?: number;
+  empaqueInsumoId?: ID;
+}
+
+export interface NuevaVentaDirecta {
+  fecha: string;
+  productoId: ID;
+  cantidad: number;
+  precioUnitario: number;
 }
 
 export interface NuevoRecetaItem {

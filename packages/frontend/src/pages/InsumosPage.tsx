@@ -17,11 +17,13 @@ import {
   Sheet,
   Tarjeta,
 } from '../components/ui';
+import { useDialog } from '../components/dialog';
 import { useAccion, useInsumos } from '../data/hooks';
 import { cargarCatalogoInicial } from '../data/seed';
 
 export function InsumosPage() {
   const { data: insumos = [] } = useInsumos();
+  const { confirmar } = useDialog();
   const crear = useAccion((repo, d: NuevoInsumo) => repo.insumos.create(d));
   const actualizar = useAccion((repo, a: { id: string; data: Partial<NuevoInsumo> }) =>
     repo.insumos.update(a.id, a.data),
@@ -94,8 +96,9 @@ export function InsumosPage() {
                     ✏️
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`¿Borrar ${i.nombre}?`)) borrar.mutate(i.id);
+                    onClick={async () => {
+                      if (await confirmar(`¿Borrar ${i.nombre}?`, { peligro: true, textoConfirmar: 'Borrar' }))
+                        borrar.mutate(i.id);
                     }}
                     className="p-2 text-xl"
                     aria-label="Borrar"

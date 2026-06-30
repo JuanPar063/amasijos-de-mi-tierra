@@ -17,12 +17,14 @@ import {
   Sheet,
   Tarjeta,
 } from '../components/ui';
+import { useDialog } from '../components/dialog';
 import { useAccion, useCompras, useInsumos } from '../data/hooks';
 import { formatDinero, formatFecha, hoyISO } from '../lib/format';
 
 export function ComprasPage() {
   const { data: compras = [] } = useCompras();
   const { data: insumos = [] } = useInsumos();
+  const { confirmar } = useDialog();
   const crear = useAccion((repo, d: NuevaCompraInsumo) => repo.compras.create(d));
   const borrar = useAccion((repo, id: string) => repo.compras.delete(id));
 
@@ -101,8 +103,9 @@ export function ComprasPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => {
-                      if (window.confirm('¿Borrar esta compra?')) borrar.mutate(c.id);
+                    onClick={async () => {
+                      if (await confirmar('¿Borrar esta compra?', { peligro: true, textoConfirmar: 'Borrar' }))
+                        borrar.mutate(c.id);
                     }}
                     className="p-2 text-xl"
                     aria-label="Borrar"

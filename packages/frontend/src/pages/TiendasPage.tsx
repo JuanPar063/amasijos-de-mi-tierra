@@ -9,10 +9,12 @@ import {
   Sheet,
   Tarjeta,
 } from '../components/ui';
+import { useDialog } from '../components/dialog';
 import { useAccion, useTiendas } from '../data/hooks';
 
 export function TiendasPage() {
   const { data: tiendas = [] } = useTiendas();
+  const { confirmar } = useDialog();
   const crear = useAccion((repo, d: NuevaTienda) => repo.tiendas.create(d));
   const actualizar = useAccion((repo, a: { id: string; data: Partial<NuevaTienda> }) =>
     repo.tiendas.update(a.id, a.data),
@@ -72,8 +74,9 @@ export function TiendasPage() {
                     ✏️
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`¿Borrar ${t.nombre}?`)) borrar.mutate(t.id);
+                    onClick={async () => {
+                      if (await confirmar(`¿Borrar ${t.nombre}?`, { peligro: true, textoConfirmar: 'Borrar' }))
+                        borrar.mutate(t.id);
                     }}
                     className="p-2 text-xl"
                     aria-label="Borrar"

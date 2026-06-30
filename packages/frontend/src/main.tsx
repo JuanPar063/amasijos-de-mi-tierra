@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
+import { DialogProvider } from './components/dialog';
 import { RepoContext } from './storage/repo-context';
 import { crearRepositorio } from './storage';
 import './index.css';
@@ -20,7 +21,9 @@ crearRepositorio().then((repositorio) => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RepoContext.Provider value={repositorio}>
-          <App />
+          <DialogProvider>
+            <App />
+          </DialogProvider>
         </RepoContext.Provider>
       </QueryClientProvider>
     </StrictMode>,

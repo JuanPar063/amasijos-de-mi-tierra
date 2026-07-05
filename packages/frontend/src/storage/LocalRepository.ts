@@ -61,6 +61,7 @@ export class LocalRepository implements Repository {
         nombre: data.nombre.trim(),
         unidadBase: data.unidadBase ?? 'g',
         stockActual: data.stockActual ?? 0,
+        ...(data.precioBase != null ? { precioBase: data.precioBase } : {}),
       };
       await db.insumos.add(insumo);
       return insumo;

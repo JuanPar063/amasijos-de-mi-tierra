@@ -37,11 +37,15 @@ export function ComprasPage() {
   const [costoTotal, setCostoTotal] = useState('');
 
   const unidadSel = porId.get(insumoId)?.unidadBase ?? 'g';
-  // Precio por unidad base del insumo (de su última compra vigente en la fecha).
-  const precioBase = useMemo(
-    () => (insumoId ? costoPorBaseVigente(insumoId, fecha, compras) : 0),
-    [insumoId, fecha, compras],
-  );
+  // Precio por unidad base: usa el precio definido en el insumo; si no tiene,
+  // cae al de su última compra vigente (compatibilidad con insumos antiguos).
+  const precioBase = useMemo(() => {
+    if (!insumoId) return 0;
+    const definido = porId.get(insumoId)?.precioBase;
+    return definido != null && definido > 0
+      ? definido
+      : costoPorBaseVigente(insumoId, fecha, compras);
+  }, [insumoId, fecha, compras, porId]);
 
   // Al cambiar la cantidad, autocompleta el costo total = cantidad × precio base.
   function aplicarCantidad(n: number) {
@@ -151,7 +155,7 @@ export function ComprasPage() {
           />
           {precioBase > 0 && (
             <span className="text-xs text-amber-600">
-              Calculado con {formatDinero(precioBase)}/{unidadSel} (último precio). Puedes ajustarlo.
+              Calculado con {formatDinero(precioBase)}/{unidadSel}. Puedes ajustarlo.
             </span>
           )}
         </div>

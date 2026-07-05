@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   formatCantidadDetalle,
+  GRAMOS_POR_LIBRA,
   type Insumo,
   type NuevoInsumo,
   type UnidadBase,
@@ -20,6 +21,20 @@ import {
 import { useDialog } from '../components/dialog';
 import { useAccion, useInsumos } from '../data/hooks';
 import { cargarCatalogoInicial } from '../data/seed';
+import { formatDinero } from '../lib/format';
+
+/** Precio que se teclea (por libra si es peso, por unidad si es conteo) → precio por unidad base. */
+function aPrecioBase(precio: string, unidadBase: UnidadBase): number | undefined {
+  const n = Number(precio);
+  if (!precio.trim() || !(n > 0)) return undefined;
+  return unidadBase === 'g' ? n / GRAMOS_POR_LIBRA : n;
+}
+/** Precio por unidad base → valor a mostrar en el campo (por libra si es peso). */
+function aPrecioInput(insumo: Insumo): string {
+  if (insumo.precioBase == null) return '';
+  const v = insumo.unidadBase === 'g' ? insumo.precioBase * GRAMOS_POR_LIBRA : insumo.precioBase;
+  return String(Math.round(v * 100) / 100);
+}
 
 export function InsumosPage() {
   const { data: insumos = [] } = useInsumos();
@@ -36,12 +51,14 @@ export function InsumosPage() {
   const [nombre, setNombre] = useState('');
   const [unidadBase, setUnidadBase] = useState<UnidadBase>('g');
   const [stock, setStock] = useState(0);
+  const [precio, setPrecio] = useState('');
 
   function abrirNuevo() {
     setEditando(null);
     setNombre('');
     setUnidadBase('g');
     setStock(0);
+    setPrecio('');
     setAbierto(true);
   }
   function abrirEditar(i: Insumo) {
@@ -49,12 +66,15 @@ export function InsumosPage() {
     setNombre(i.nombre);
     setUnidadBase(i.unidadBase);
     setStock(i.stockActual);
+    setPrecio(aPrecioInput(i));
     setAbierto(true);
   }
   function guardar() {
     if (!nombre.trim()) return;
-    if (editando) actualizar.mutate({ id: editando.id, data: { nombre, stockActual: stock } });
-    else crear.mutate({ nombre, unidadBase, stockActual: stock });
+    const precioBase = aPrecioBase(precio, unidadBase);
+    if (editando)
+      actualizar.mutate({ id: editando.id, data: { nombre, stockActual: stock, precioBase } });
+    else crear.mutate({ nombre, unidadBase, stockActual: stock, precioBase });
     setAbierto(false);
   }
 
@@ -143,6 +163,22 @@ export function InsumosPage() {
             ]}
           />
         )}
+        <div className="flex flex-col gap-1">
+          <Campo
+            etiqueta={unidadBase === 'g' ? 'Precio por libra (500 g)' : 'Precio por unidad'}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            value={precio}
+            onChange={(e) => setPrecio(e.target.value)}
+            placeholder="0"
+          />
+          {unidadBase === 'g' && Number(precio) > 0 && (
+            <span className="text-xs text-amber-600">
+              ≈ {formatDinero(Number(precio) / GRAMOS_POR_LIBRA)} por gramo
+            </span>
+          )}
+        </div>
         <CampoCantidad
           etiqueta="Stock actual"
           unidadBase={unidadBase}

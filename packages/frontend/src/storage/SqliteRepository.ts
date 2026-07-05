@@ -37,7 +37,8 @@ import type {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS insumos (
-  id TEXT PRIMARY KEY, nombre TEXT NOT NULL, unidad_base TEXT NOT NULL, stock_actual REAL NOT NULL DEFAULT 0
+  id TEXT PRIMARY KEY, nombre TEXT NOT NULL, unidad_base TEXT NOT NULL,
+  stock_actual REAL NOT NULL DEFAULT 0, precio_base REAL
 );
 CREATE TABLE IF NOT EXISTS compras_insumo (
   id TEXT PRIMARY KEY, insumo_id TEXT NOT NULL REFERENCES insumos(id) ON DELETE CASCADE,
@@ -72,7 +73,8 @@ CREATE TABLE IF NOT EXISTS ventas_directas (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_venta_dia ON ventas_directas(fecha, producto_id);
 `;
 
-const SEL_INSUMO = 'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual"';
+const SEL_INSUMO =
+  'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual", precio_base AS "precioBase"';
 const SEL_COMPRA = 'id, insumo_id AS "insumoId", fecha, cantidad, costo_total AS "costoTotal"';
 const SEL_PRODUCTO =
   'id, nombre, precio_venta AS "precioVenta", precio_mostrador AS "precioMostrador", empaque_insumo_id AS "empaqueInsumoId"';
@@ -140,6 +142,7 @@ export class SqliteRepository implements Repository {
     for (const ddl of [
       'ALTER TABLE productos ADD COLUMN precio_mostrador REAL;',
       'ALTER TABLE productos ADD COLUMN empaque_insumo_id TEXT;',
+      'ALTER TABLE insumos ADD COLUMN precio_base REAL;',
     ]) {
       try {
         await this.db.execute(ddl);
@@ -197,25 +200,22 @@ export class SqliteRepository implements Repository {
         nombre: data.nombre.trim(),
         unidadBase: data.unidadBase ?? 'g',
         stockActual: data.stockActual ?? 0,
+        ...(data.precioBase != null ? { precioBase: data.precioBase } : {}),
       };
-      await this.run('INSERT INTO insumos (id, nombre, unidad_base, stock_actual) VALUES (?, ?, ?, ?)', [
-        insumo.id,
-        insumo.nombre,
-        insumo.unidadBase,
-        insumo.stockActual,
-      ]);
+      await this.run(
+        'INSERT INTO insumos (id, nombre, unidad_base, stock_actual, precio_base) VALUES (?, ?, ?, ?, ?)',
+        [insumo.id, insumo.nombre, insumo.unidadBase, insumo.stockActual, insumo.precioBase ?? null],
+      );
       return insumo;
     },
     update: async (id, patch) => {
       const cur = await this.insumos.get(id);
       if (!cur) throw new Error('Insumo no encontrado');
       const next: Insumo = { ...cur, ...patch };
-      await this.run('UPDATE insumos SET nombre = ?, unidad_base = ?, stock_actual = ? WHERE id = ?', [
-        next.nombre,
-        next.unidadBase,
-        next.stockActual,
-        id,
-      ]);
+      await this.run(
+        'UPDATE insumos SET nombre = ?, unidad_base = ?, stock_actual = ?, precio_base = ? WHERE id = ?',
+        [next.nombre, next.unidadBase, next.stockActual, next.precioBase ?? null, id],
+      );
       return next;
     },
     delete: async (id) => {
@@ -554,7 +554,11 @@ export class SqliteRepository implements Repository {
         await this.run(`DELETE FROM ${t}`, [], false);
       }
       for (const i of d.insumos)
-        await this.run('INSERT INTO insumos (id, nombre, unidad_base, stock_actual) VALUES (?, ?, ?, ?)', [i.id, i.nombre, i.unidadBase, i.stockActual], false);
+        await this.run(
+          'INSERT INTO insumos (id, nombre, unidad_base, stock_actual, precio_base) VALUES (?, ?, ?, ?, ?)',
+          [i.id, i.nombre, i.unidadBase, i.stockActual, i.precioBase ?? null],
+          false,
+        );
       for (const x of d.compras)
         await this.run('INSERT INTO compras_insumo (id, insumo_id, fecha, cantidad, costo_total) VALUES (?, ?, ?, ?, ?)', [x.id, x.insumoId, x.fecha, x.cantidad, x.costoTotal], false);
       for (const p of d.productos)

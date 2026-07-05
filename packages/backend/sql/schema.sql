@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS insumos (
   id           TEXT PRIMARY KEY,
   nombre       TEXT NOT NULL,
   unidad_base  TEXT NOT NULL CHECK (unidad_base IN ('g', 'u')),
-  stock_actual DOUBLE PRECISION NOT NULL DEFAULT 0
+  stock_actual DOUBLE PRECISION NOT NULL DEFAULT 0,
+  precio_base  DOUBLE PRECISION
 );
+-- Migración para bases existentes:
+ALTER TABLE insumos ADD COLUMN IF NOT EXISTS precio_base DOUBLE PRECISION;
 
 CREATE TABLE IF NOT EXISTS compras_insumo (
   id          TEXT PRIMARY KEY,

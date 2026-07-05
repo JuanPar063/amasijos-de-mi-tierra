@@ -22,6 +22,12 @@ export interface Insumo {
   unidadBase: UnidadBase;
   /** Stock vigente en la unidad base. Lo mantiene el repositorio (compras suman, producciones restan). */
   stockActual: number;
+  /**
+   * Precio de referencia por unidad base (por gramo o por unidad). Se define al
+   * crear el insumo y sirve para autocompletar el total al registrar una compra
+   * (total = precioBase × cantidad). Opcional para insumos antiguos sin precio.
+   */
+  precioBase?: number;
 }
 
 export interface CompraInsumo {
@@ -109,6 +115,8 @@ export interface NuevoInsumo {
   unidadBase?: UnidadBase;
   /** Stock inicial en la unidad base. Por defecto 0. */
   stockActual?: number;
+  /** Precio de referencia por unidad base (por gramo o por unidad). */
+  precioBase?: number;
 }
 
 export interface NuevaCompraInsumo {

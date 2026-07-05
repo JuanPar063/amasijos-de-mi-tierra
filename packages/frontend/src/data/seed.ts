@@ -10,14 +10,13 @@
 // - "Mantequilla" en las fórmulas se mapea al insumo "Margarina"; "Esencias" a
 //   "Esencia de vainilla" (el documento no especifica cuál).
 import type { Repository, UnidadBase } from '@panaderia/shared';
-import { hoyISO } from '../lib/format';
 
 interface SeedInsumo {
   nombre: string;
   unidadBase: UnidadBase;
-  /** Costo total de la compra de referencia (COP). null = sin precio en la lista. */
+  /** Precio de referencia por `cantidadRef` (COP) para fijar el precio por unidad base. null = sin precio en la lista. */
   precio: number | null;
-  /** Cantidad de la compra de referencia, en la unidad base (500 g = 1 libra). */
+  /** Cantidad de referencia del precio, en la unidad base (500 g = 1 libra). */
   cantidadRef: number;
 }
 
@@ -92,19 +91,23 @@ function porUnidad(base: Ingredientes, rinde: number, extras: Ingredientes = {})
 
 interface SeedProducto {
   nombre: string;
+  /** Precio a tiendas (entregas). */
   precioVenta: number;
+  /** Precio al público en el mostrador (venta directa). */
+  precioMostrador: number;
   receta: Ingredientes;
 }
 
+// Precios (COP): mostrador = precio al público; tienda = precio de entrega a tiendas.
 const PRODUCTOS: SeedProducto[] = [
-  { nombre: 'Francés Queso', precioVenta: 0, receta: porUnidad(BASE_FRANCES, 3.3, { 'Queso duro': 7 }) },
-  { nombre: 'Francés Normal', precioVenta: 0, receta: porUnidad(BASE_FRANCES, 5.8, { Ajonjolí: 1.5 }) },
-  { nombre: 'Francés Pequeño', precioVenta: 0, receta: porUnidad(BASE_FRANCES, 11.5) },
-  { nombre: 'Croissant', precioVenta: 0, receta: porUnidad(BASE_ALINADO, 11, { 'Queso semiduro': 7 }) },
-  { nombre: 'Pan Dulce', precioVenta: 0, receta: porUnidad(BASE_DULCE, 12) },
-  { nombre: 'Rosca', precioVenta: 0, receta: porUnidad(BASE_DULCE, 12, { Bocadillo: 10 }) },
-  { nombre: 'Quesito Dulce', precioVenta: 0, receta: porUnidad(BASE_DULCE, 12, { 'Queso semiduro': 6, Azúcar: 7 }) },
-  { nombre: 'Panocha', precioVenta: 0, receta: porUnidad(BASE_DULCE, 12, { Arequipe: 5 }) },
+  { nombre: 'Francés Queso', precioVenta: 1500, precioMostrador: 2000, receta: porUnidad(BASE_FRANCES, 3.3, { 'Queso duro': 7 }) },
+  { nombre: 'Francés Normal', precioVenta: 800, precioMostrador: 1000, receta: porUnidad(BASE_FRANCES, 5.8, { Ajonjolí: 1.5 }) },
+  { nombre: 'Francés Pequeño', precioVenta: 400, precioMostrador: 500, receta: porUnidad(BASE_FRANCES, 11.5) },
+  { nombre: 'Croissant', precioVenta: 1000, precioMostrador: 1200, receta: porUnidad(BASE_ALINADO, 11, { 'Queso semiduro': 7 }) },
+  { nombre: 'Pan Dulce', precioVenta: 800, precioMostrador: 1000, receta: porUnidad(BASE_DULCE, 12) },
+  { nombre: 'Rosca', precioVenta: 800, precioMostrador: 1000, receta: porUnidad(BASE_DULCE, 12, { Bocadillo: 10 }) },
+  { nombre: 'Quesito Dulce', precioVenta: 800, precioMostrador: 1000, receta: porUnidad(BASE_DULCE, 12, { 'Queso semiduro': 6, Azúcar: 7 }) },
+  { nombre: 'Panocha', precioVenta: 800, precioMostrador: 1000, receta: porUnidad(BASE_DULCE, 12, { Arequipe: 5 }) },
 ];
 
 export const CATALOGO_RESUMEN = { insumos: INSUMOS.length, productos: PRODUCTOS.length };
@@ -114,23 +117,25 @@ export async function cargarCatalogoInicial(
   repo: Repository,
 ): Promise<{ insumos: number; productos: number }> {
   const idPorNombre = new Map<string, string>();
-  const fecha = hoyISO();
 
   for (const s of INSUMOS) {
-    const insumo = await repo.insumos.create({ nombre: s.nombre, unidadBase: s.unidadBase });
+    // La semilla solo crea el insumo con su precio por unidad base (sin registrar
+    // compras ni stock: eso lo hace el usuario al comprar de verdad).
+    const precioBase = s.precio != null ? s.precio / s.cantidadRef : undefined;
+    const insumo = await repo.insumos.create({
+      nombre: s.nombre,
+      unidadBase: s.unidadBase,
+      precioBase,
+    });
     idPorNombre.set(s.nombre, insumo.id);
-    if (s.precio != null) {
-      await repo.compras.create({
-        insumoId: insumo.id,
-        fecha,
-        cantidad: s.cantidadRef,
-        costoTotal: s.precio,
-      });
-    }
   }
 
   for (const p of PRODUCTOS) {
-    const prod = await repo.productos.create({ nombre: p.nombre, precioVenta: p.precioVenta });
+    const prod = await repo.productos.create({
+      nombre: p.nombre,
+      precioVenta: p.precioVenta,
+      precioMostrador: p.precioMostrador,
+    });
     const receta = Object.entries(p.receta).map(([nombre, cantidad]) => {
       const insumoId = idPorNombre.get(nombre);
       if (!insumoId) throw new Error(`Insumo de receta no encontrado: ${nombre}`);

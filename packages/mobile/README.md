@@ -27,12 +27,24 @@ pnpm --filter @panaderia/mobile open:android
 cd packages/mobile/android && ./gradlew assembleRelease
 ```
 
-El APK queda en `packages/mobile/android/app/build/outputs/apk/`. Instálalo en el
-teléfono habilitando "instalar de fuentes desconocidas" (sin Play Store).
+**Atajo (APK de depuración, sin firma):** una vez creado `android/` con
+`add:android`, un solo comando construye la web, sincroniza y genera el APK
+instalable:
 
-> **Nota (pnpm):** Capacitor descubre los plugins leyendo `node_modules`. Si
-> `cap sync` no encuentra los plugins por los enlaces simbólicos de pnpm, crea un
-> `.npmrc` en la raíz con `node-linker=hoisted` y reinstala (`pnpm install`).
+```bash
+pnpm --filter @panaderia/mobile apk:debug
+```
+
+> Este atajo usa `gradlew` (Windows). En macOS/Linux corre `./gradlew assembleDebug`
+> dentro de `packages/mobile/android`.
+
+El APK queda en `packages/mobile/android/app/build/outputs/apk/` (`debug/app-debug.apk`
+o `release/…`). Instálalo en el teléfono habilitando "instalar de fuentes
+desconocidas" (sin Play Store).
+
+> **Nota (pnpm):** Capacitor descubre los plugins leyendo `node_modules`. El
+> `.npmrc` de la raíz ya fija `node-linker=hoisted` para que `cap sync` los
+> encuentre; si cambias ese archivo, reinstala con `pnpm install`.
 
 ## Cambios de web a nativo (resumen)
 

@@ -34,7 +34,8 @@ import type {
 import { enTransaccion, query } from './db.js';
 
 // Listas de columnas con alias para que las filas vuelvan con las claves del dominio.
-const SEL_INSUMO = 'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual"';
+const SEL_INSUMO =
+  'id, nombre, unidad_base AS "unidadBase", stock_actual AS "stockActual", precio_base AS "precioBase"';
 const SEL_COMPRA = 'id, insumo_id AS "insumoId", fecha, cantidad, costo_total AS "costoTotal"';
 const SEL_PRODUCTO =
   'id, nombre, precio_venta AS "precioVenta", precio_mostrador AS "precioMostrador", empaque_insumo_id AS "empaqueInsumoId"';
@@ -121,10 +122,11 @@ export class PgRepository implements Repository {
         nombre: data.nombre.trim(),
         unidadBase: data.unidadBase ?? 'g',
         stockActual: data.stockActual ?? 0,
+        ...(data.precioBase != null ? { precioBase: data.precioBase } : {}),
       };
       await query(
-        'INSERT INTO insumos (id, nombre, unidad_base, stock_actual) VALUES ($1, $2, $3, $4)',
-        [insumo.id, insumo.nombre, insumo.unidadBase, insumo.stockActual],
+        'INSERT INTO insumos (id, nombre, unidad_base, stock_actual, precio_base) VALUES ($1, $2, $3, $4, $5)',
+        [insumo.id, insumo.nombre, insumo.unidadBase, insumo.stockActual, insumo.precioBase ?? null],
       );
       return insumo;
     },
@@ -132,12 +134,10 @@ export class PgRepository implements Repository {
       const cur = await this.insumos.get(id);
       if (!cur) throw new Error('Insumo no encontrado');
       const next: Insumo = { ...cur, ...patch };
-      await query('UPDATE insumos SET nombre = $2, unidad_base = $3, stock_actual = $4 WHERE id = $1', [
-        id,
-        next.nombre,
-        next.unidadBase,
-        next.stockActual,
-      ]);
+      await query(
+        'UPDATE insumos SET nombre = $2, unidad_base = $3, stock_actual = $4, precio_base = $5 WHERE id = $1',
+        [id, next.nombre, next.unidadBase, next.stockActual, next.precioBase ?? null],
+      );
       return next;
     },
     delete: async (id) => {
@@ -496,8 +496,8 @@ export class PgRepository implements Repository {
       );
       for (const i of d.insumos)
         await c.query(
-          'INSERT INTO insumos (id, nombre, unidad_base, stock_actual) VALUES ($1, $2, $3, $4)',
-          [i.id, i.nombre, i.unidadBase, i.stockActual],
+          'INSERT INTO insumos (id, nombre, unidad_base, stock_actual, precio_base) VALUES ($1, $2, $3, $4, $5)',
+          [i.id, i.nombre, i.unidadBase, i.stockActual, i.precioBase ?? null],
         );
       for (const x of d.compras)
         await c.query(
